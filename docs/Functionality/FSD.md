@@ -661,7 +661,7 @@ verification:
 | FR-12.3 | Submit bench SSID with wrong password | Error shown ≤ 20 s; still PROVISIONING; NVS has no creds after reboot | Credentials persisted | bench |
 | FR-12.4 | Submit, one invalid field at a time: SSID empty / 33 bytes; WiFi password 7 / 64 chars; admin password 7 / 65 chars; hostname `bad host!` / 33 chars / `-x`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars | Each rejected with an error naming its field; nothing persisted | Any of them accepted or persisted | host (validator) + bench |
 | FR-12.5 | OPERATIONAL · scan from bench | No `MX320-Setup-*` SSID | SoftAP visible | bench |
-| FR-12.6 | Submit form with error; inspect response | Password fields empty | Password value in HTML | bench |
+| FR-12.6 | Known WiFi and admin passwords · capture every portal response: the setup page before submit, the error response to an invalid submit, the response to a failed test-join, the success response, and the setup page fetched again after each | Password fields empty in every capture | Either password value in any capture | bench |
 | FR-12.7 | `strings` on release image | Bench SSID/password absent | Present | other (CI) |
 
 ## 13. MQTT / Home Assistant Publisher
@@ -716,9 +716,9 @@ verification:
 |---|---|---|---|---|
 | FR-13.1 | Subscribed · (a) start a job, (b) complete it, (c) set the sink's port status to paper-out, (d) abort a job (client RST) | A new retained state ≤ 2 s after each: (a) `printing: true`, (b) `job.completed` +1, (c) `printer.status: paper_out`, (d) `job.aborted` +1 | Message without retain flag; a message still showing the previous value | bench |
 | FR-13.2 | Idle 3 min | ≥ 3 state messages | Gap > 70 s | bench |
-| FR-13.3 | Subscribe, reset DUT | Retained `online` ≤ 5 s after `wifi: got ip` | No retained flag | bench |
+| FR-13.3 | Subscribe · (a) reset DUT; (b) restart a broker that keeps no persistence (bench broker) while the DUT runs | Retained `online` (a) ≤ 5 s after `wifi: got ip`, (b) ≤ 30 s after the broker restart | No retained flag; `online` missing after the broker restart | bench |
 | FR-13.7 | Power off DUT | Broker publishes retained `offline` ≤ 45 s after power-off (1.5 × keepalive, MQTT 3.1.1 §3.1.2.10) | Retained `online` stays | bench |
-| FR-13.4 | Connect; read retained `homeassistant/#` | Five configs, schema-valid, same device block | Discovery for non-listed entities | host (builder) + bench |
+| FR-13.4 | (a) DUT connects; (b) restart a broker that keeps no persistence while the DUT runs · read retained `homeassistant/#` after each | Five configs, schema-valid, same device block — (b) ≤ 30 s after the broker restart | Discovery for non-listed entities; configs missing after the broker restart | host (builder) + bench |
 | FR-13.6 | see FR-13.5 contract | — | — | bench |
 
 # Part C — Foundation (L0)
@@ -927,7 +927,7 @@ Derived requirements:
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | NFR-22.1 | See FR-11.4 / FR-11.7 | — | — | bench |
-| NFR-22.2 | Set known passwords; capture all of /, /api/status, /settings, MQTT, UART, UDP | No capture contains any password | Any occurrence | bench |
+| NFR-22.2 | Set known passwords; capture all of `GET /`, `/api/status`, `GET /settings`, the responses to `POST /settings` and `POST /api/ota` (success and failure), every portal response (as FR-12.6), MQTT, UART, UDP | No capture contains any password | Any occurrence | bench |
 | NFR-22.3 | Wrong auths #1–3 on `POST /api/ota`, #4–5 on `GET /settings`; then a correct auth on `POST /settings`; wait 60 s; correct auth on each endpoint | Attempts #1–5 each get 401; the correct `POST /settings` within the lockout gets 429; after 60 s every endpoint accepts the correct auth | Any of #1–5 answered 429 (threshold below 5); correct auth accepted within lockout; counters kept per endpoint | bench |
 
 **Accepted risks** (no requirement written):
@@ -1065,7 +1065,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.11
+fsd_version: 0.1.12
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1087,6 +1087,7 @@ change_history:
   - 0.1.9 2026-11-01 Load-defined round 7: release-build-on-network precondition (FR-19.4, NFR-17.6); phase-specific FR-2.12 precondition; FR-2.18 timed to `state: CONNECTING`; Phase 3 scope names job fields
   - 0.1.10 2026-11-01 Load-defined round 8 (minor only): lockout shared across admin endpoints; mqtt_pass observed via mqtt.connected; FR-2.19 per-state means; FR-19.3 network precondition
   - 0.1.11 2026-11-01 Load-defined round 9 (minor only): FR-11.9 positive settings change; factory-reset defaults observed; FR-2.16 timing; FR-20.2 per phase; lockout threshold pinned; OD-4 gate list complete
+  - 0.1.12 2026-11-01 Load-defined round 10 (minor only): online/discovery re-published after a broker restart observed; every portal and admin response captured for password echoes
 superseded_requirements: []
 open_decisions:
   - id: OD-3
