@@ -205,7 +205,7 @@ verification:
     - Log marker `reset: factory` then a reboot.
     - After reboot the setup SoftAP `MX320-Setup-<id>` is visible within 10 s.
     - GET http://192.168.4.1/api/status shows `configured: false` and `state: PROVISIONING`.
-    - For the three provisioned source states: after re-provisioning with WiFi credentials and a new admin password different from the old one (no MQTT fields), `config.mqtt_host` is empty and `POST /api/ota` with the old admin password answers 401.
+    - For the three provisioned source states: after re-provisioning with WiFi credentials and a new admin password different from the old one (no MQTT fields), `config.mqtt_host` and `config.mqtt_user` are empty, `config.mqtt_port` = 1883, `config.hostname` = `mx320-<id>`, and `POST /api/ota` with the old admin password answers 401.
   timing: reboot ≤ 3 s after the 10 s threshold
   tolerance: ±0.5 s on the 10 s threshold
   prohibited_outcomes:
@@ -225,7 +225,7 @@ verification:
 | FR-2.12 | Credentials stored, AP up; for the Phase 4 exit also printer present and broker configured · reset | Each ≤ 5 s after `wifi: got ip`: `/api/status` 200; mDNS A answer; TCP :9100 accepts; retained `online` on the broker (Phase 1 exit: `/api/status` only) | A service answering before `wifi: got ip` | bench |
 | FR-2.13 | Credentials for the bench AP stored · reset with (a) the bench AP stopped, (b) the bench AP up with a different password | For 5 min: successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | SoftAP started; reboot | bench |
 | FR-2.14 | Job in progress · AP disabled | UART `state: WIFI_RECOVERY` and `job: abort id=<n> reason=wifi` ≤ 2 s after AP disable | DUT reboots; job later reported DONE | bench |
-| FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | `wifi: retry in <n> s` lines show n = 1, 2, 4 … capped at 60 | Reboot; SoftAP | bench |
+| FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | Successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | Reboot; SoftAP; a retry earlier than n s | bench |
 | FR-2.18 | PROVISIONING · submit valid form for the bench AP | `state: CONNECTING` ≤ 5 s after `portal: test-join ok`; SoftAP absent from a bench scan taken right after | Credentials persisted before test-join succeeded | bench |
 | FR-2.20 | Feed `IP_LOST` to the lifecycle function in OPERATIONAL with a job active (the bench cannot revoke a DHCP lease) | Next state WIFI_RECOVERY; action abort job | Any other next state | host |
 | FR-2.19 | In each of PROVISIONING (NVS erased), CONNECTING (credentials stored, bench AP stopped), OPERATIONAL, WIFI_RECOVERY (bench AP disabled after OPERATIONAL) · hold BOOT 9 s | No state change; config unchanged; no reboot | `reset: factory` logged | bench |
@@ -278,7 +278,7 @@ Each phase is entered using only what earlier phases delivered.
 - **Scope:** USB host + hub support; printer-class client (§8); status
   derivation (§7); printer fields in `/api/status`.
 - **Exit:** FR-8.1–FR-8.4, FR-8.8, FR-8.9, FR-7.1, FR-7.2 (idle case a), NFR-2.5, NFR-2.7, NFR-17.3,
-  FR-20.1 (Phase 2 rows of the §20 marker table) pass;
+  FR-20.1–FR-20.2 (Phase 2 rows of the §20 marker table) pass;
   printer identity of the real MX320 visible in `/api/status`.
 - **Depends on:** Phase 1 (`/api/status`, OTA, logging); commissioning of the
   ESP32 → hub → MX320 power/VBUS arrangement (R1, R2).
@@ -289,7 +289,7 @@ Each phase is entered using only what earlier phases delivered.
   status page (FR-11.1), `printing` and `job.*` fields in `/api/status`.
 - **Exit:** FR-6.x (FR-6.9, FR-6.11, FR-6.12 via `/api/status`), NFR-6.1,
   FR-9.x, FR-10.x, FR-7.3, FR-8.5–FR-8.7, FR-2.15,
-  FR-7.2 (mid-job case b), FR-11.1, FR-11.5, NFR-14.1, NFR-17.4, NFR-17.2, FR-2.14, FR-20.1 (Phase 3 rows of the §20 marker table)
+  FR-7.2 (mid-job case b), FR-11.1, FR-11.5, NFR-14.1, NFR-17.4, NFR-17.2, FR-2.14, FR-20.1–FR-20.2 (Phase 3 rows of the §20 marker table)
   pass at bench tier against the USB sink and the real MX320; acceptance AT-1
   (macOS) and AT-2 (Windows) pass.
 - **Depends on:** Phase 2 (printer link), Phase 1 (WiFi, HTTP).
@@ -300,7 +300,7 @@ Each phase is entered using only what earlier phases delivered.
   factory reset (FR-2.17, FR-2.19), MQTT + HA discovery (§13), release-image check
   that no credentials are compiled in (FR-12.7).
 - **Exit:** FR-2.10, FR-2.12 (all services), FR-2.17–FR-2.19,
-  FR-11.2 (full Appendix B schema), NFR-16.1, NFR-2.6, FR-20.1 (Phase 4 rows of the §20 marker table), FR-11.7,
+  FR-11.2 (full Appendix B schema), NFR-16.1, NFR-2.6, FR-20.1–FR-20.2 (Phase 4 rows of the §20 marker table), FR-11.7, FR-11.9,
   FR-11.8, FR-12.x, FR-13.x, FR-18.1 (MQTT), NFR-22.x and every
   remaining Must/Should pass; AT-3 and AT-4 pass.
 - **Depends on:** Phase 3 (job state to publish), Phase 1 (NVS, HTTP).
@@ -590,6 +590,9 @@ HTTP Basic auth (user `admin`) — §22.
 - **FR-11.8** [Must] `[derived]`: Settings changes shall be validated per §19;
   an invalid field shall be rejected with 400 naming the field, and no field of
   that submission shall be persisted.
+- **FR-11.9** [Must] `[user]`: An authenticated `POST /settings` whose fields
+  are all valid shall answer 200, persist every submitted field, and apply each
+  with the §19 *Change effect* of that field.
 
 ```yaml
 id: FR-11.3
@@ -620,6 +623,7 @@ verification:
 | FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical; inactive-slot SHA-256 (`/api/flash/read`) unchanged | Reboot mid-job; inactive slot written | bench |
 | FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) an image of 3 145 729 bytes (0x300001) | 400; no reboot; version unchanged | Boot into partial image | bench |
 | FR-11.7 | GET /settings and POST /settings, each without auth | Both 401; `/api/status` `config.*` unchanged | Settings page served; any field persisted | bench |
+| FR-11.9 | Valid credentials · POST hostname `mx320-new`, MQTT host/port/user/password of the HA broker, admin_pass `newpass12`; then reset | 200; at once: `config.mqtt_*` show the new values, the old admin password gets 401 and `newpass12` 200; after the reset: `config.hostname` = `mx320-new`, `mx320-new.local` resolves, `mqtt.connected: true` ≤ 30 s after `wifi: got ip` | A submitted field not persisted; admin change waiting for a reboot | bench |
 | FR-11.8 | Valid credentials · POST one invalid field at a time together with one valid change to another field (MQTT port 1884; hostname `mx320-new` when the port is under test): hostname `bad host!` / 33 chars / `-x`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars; admin_pass 7 / 65 chars | Each 400 naming the field; the valid companion field still holds its old value in `config.*` | Partial persist; any invalid value accepted | host (validator) + bench |
 
 ## 12. Captive Portal
@@ -924,7 +928,7 @@ Derived requirements:
 |---|---|---|---|---|
 | NFR-22.1 | See FR-11.4 / FR-11.7 | — | — | bench |
 | NFR-22.2 | Set known passwords; capture all of /, /api/status, /settings, MQTT, UART, UDP | No capture contains any password | Any occurrence | bench |
-| NFR-22.3 | 3 wrong auths on `POST /api/ota` and 2 on `GET /settings`; then a correct auth on `POST /settings`; wait 60 s; correct auth on each endpoint | Correct `POST /settings` within the lockout gets 429; after 60 s every endpoint accepts the correct auth | Correct auth accepted within lockout; counters kept per endpoint | bench |
+| NFR-22.3 | Wrong auths #1–3 on `POST /api/ota`, #4–5 on `GET /settings`; then a correct auth on `POST /settings`; wait 60 s; correct auth on each endpoint | Attempts #1–5 each get 401; the correct `POST /settings` within the lockout gets 429; after 60 s every endpoint accepts the correct auth | Any of #1–5 answered 429 (threshold below 5); correct auth accepted within lockout; counters kept per endpoint | bench |
 
 **Accepted risks** (no requirement written):
 - No TLS: the admin password travels in clear (HTTP Basic) on the LAN.
@@ -1061,7 +1065,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.10
+fsd_version: 0.1.11
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1082,13 +1086,14 @@ change_history:
   - 0.1.8 2026-11-01 Load-defined round 6: FR-19.3/19.4 observed via OTA auth; `wifi: connecting` marker anchors retry spacing; FR-12.1 exempts /api/status; `configured` and `reset_reason` defined; per-state FR-2.17 preconditions; NFR-2.x in phase exits
   - 0.1.9 2026-11-01 Load-defined round 7: release-build-on-network precondition (FR-19.4, NFR-17.6); phase-specific FR-2.12 precondition; FR-2.18 timed to `state: CONNECTING`; Phase 3 scope names job fields
   - 0.1.10 2026-11-01 Load-defined round 8 (minor only): lockout shared across admin endpoints; mqtt_pass observed via mqtt.connected; FR-2.19 per-state means; FR-19.3 network precondition
+  - 0.1.11 2026-11-01 Load-defined round 9 (minor only): FR-11.9 positive settings change; factory-reset defaults observed; FR-2.16 timing; FR-20.2 per phase; lockout threshold pinned; OD-4 gate list complete
 superseded_requirements: []
 open_decisions:
   - id: OD-3
     gates: [FR-7.1, FR-7.2]
     text: R3 — whether the MX320 maintains 1284 port-status bits; resolved at commissioning.
   - id: OD-4
-    gates: [FR-6.1, FR-6.5, FR-6.8, FR-6.10, NFR-6.1, FR-8.5–FR-8.8, NFR-17.2]
+    gates: [FR-2.15, FR-6.1–FR-6.5, FR-6.8, FR-6.10, NFR-6.1, FR-7.2 (case b), FR-8.5–FR-8.8, FR-13.1 (case c), NFR-17.2]
     text: Availability of a USB printer-class sink on the bench (A3); without it these contracts can only run against the real MX320 and lose byte-exactness.
 related_test_baseline: testing/test-plan.yaml
 ```
