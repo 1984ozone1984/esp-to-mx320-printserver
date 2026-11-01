@@ -4,7 +4,8 @@ Provenance tags: `[user]` stated by the user · `[derived]` logical consequence 
 a `[user]` decision · `[pack:esp32]` proposed by the ESP32 domain pack and
 accepted by the user · `[tooling]` harvested from the sibling project's pinned
 build tooling · `[proposed]` a value this document proposes that the user has not
-yet accepted (listed in Appendix C; `status: proposed` until accepted).
+yet accepted (`status: proposed` until accepted). Values accepted by the user
+(OD-1, OD-2) carry no marker and are approved.
 
 Requirement IDs follow `FR-<chapter>.<n>` / `NFR-<chapter>.<n>`. IDs are stable:
 never renumbered, only `deprecated` or `superseded`.
@@ -128,12 +129,12 @@ Transition table — **the table is normative; every row is a requirement**
 
 | ID | From | Event | Guard | To | Action | Limit |
 |---|---|---|---|---|---|---|
-| FR-2.10 | `BOOT` | NVS read | no WiFi credentials | `PROVISIONING` | Start setup SoftAP, DNS catch-all, portal | portal reachable ≤ 10 s after reset `[proposed]` |
+| FR-2.10 | `BOOT` | NVS read | no WiFi credentials | `PROVISIONING` | Start setup SoftAP, DNS catch-all, portal | portal reachable ≤ 10 s after reset |
 | FR-2.11 | `BOOT` | NVS read | credentials present | `CONNECTING` | Start STA | ≤ 2 s after reset |
-| FR-2.12 | `CONNECTING` | got IPv4 | — | `OPERATIONAL` | Start RAW port (if printer present), mDNS, HTTP, MQTT | services up ≤ 5 s after IP `[proposed]` |
-| FR-2.13 | `CONNECTING` | connect fails / timeout | — | `CONNECTING` | Retry with backoff 1, 2, 4 … 60 s, unbounded | ceiling 60 s `[proposed]` |
+| FR-2.12 | `CONNECTING` | got IPv4 | — | `OPERATIONAL` | Start RAW port (if printer present), mDNS, HTTP, MQTT | services up ≤ 5 s after IP |
+| FR-2.13 | `CONNECTING` | connect fails / timeout | — | `CONNECTING` | Retry with backoff 1, 2, 4 … 60 s, unbounded | ceiling 60 s |
 | FR-2.14 | `OPERATIONAL` | STA disconnected or IP lost | — | `WIFI_RECOVERY` | Abort active job (§6), stop RAW listener, mDNS, MQTT | ≤ 2 s |
-| FR-2.15 | `WIFI_RECOVERY` | got IPv4 | — | `OPERATIONAL` | Restart services as FR-2.12 | RAW port accepting ≤ 30 s after AP returns `[proposed]` |
+| FR-2.15 | `WIFI_RECOVERY` | got IPv4 | — | `OPERATIONAL` | Restart services as FR-2.12 | RAW port accepting ≤ 30 s after AP returns |
 | FR-2.16 | `WIFI_RECOVERY` | connect fails | — | `WIFI_RECOVERY` | Retry, backoff as FR-2.13 | ceiling 60 s |
 | FR-2.17 | any but `BOOT` | BOOT held ≥ 10 s | — | `FACTORY_RESET` | Erase user config (§19), reboot | reboot ≤ 3 s after threshold |
 | FR-2.18 | `PROVISIONING` | valid form submitted and STA test-join succeeds | — | `CONNECTING` | Persist config, stop SoftAP | ≤ 5 s after test-join |
@@ -141,7 +142,7 @@ Transition table — **the table is normative; every row is a requirement**
 Unhandled-event default: events not listed are logged at debug level and
 discarded. Explicit exclusions: `PROVISIONING` never falls back to anything but
 itself (no timeout reboot); `CONNECTING`/`WIFI_RECOVERY` never fall back to
-`PROVISIONING` — the portal returns only via factory reset `[proposed]`.
+`PROVISIONING` — the portal returns only via factory reset.
 BOOT press < 10 s has no effect in any state (FR-2.19). Watchdog reset (§17)
 enters `BOOT` like any reset.
 
@@ -370,25 +371,25 @@ RAW connection is accepted and ends on client close (DONE) or on a fault
   interleave.
 - **FR-6.3** [Must] `[derived]`: A RAW connection queued behind an active job
   shall be serviced as the next job after the active job ends, without the
-  client reconnecting (listen backlog ≥ 2 `[proposed]`).
+  client reconnecting (listen backlog ≥ 2).
 - **FR-6.4** [Must] `[derived]`: On client close (TCP FIN) the device shall
   mark the job DONE after the last byte has been accepted by the printer, and
   close its side of the connection.
 - **FR-6.5** [Must] `[derived]`: While the printer is not accepting data, the
   device shall stop reading from the TCP connection (backpressure); bytes held
-  in device memory for the active job shall not exceed 64 KiB `[proposed]`.
+  in device memory for the active job shall not exceed 64 KiB.
 - **FR-6.6** [Must] `[derived]`: If the printer detaches during a job, the
   device shall mark the job ABORTED and reset the TCP connection within 5 s
-  `[proposed]` of detach.
+  of detach.
 - **FR-6.7** [Should] `[derived]`: A job connection on which no byte arrives for
-  300 s `[proposed]` while the device is ready to read shall be closed and the
+  300 s while the device is ready to read shall be closed and the
   job marked DONE.
 - **FR-6.8** [Must] `[derived]`: Time spent with the printer not accepting data
   (paper out, cover open) shall not count towards the FR-6.7 idle limit.
 - **FR-6.9** [Should] `[user]`: The device shall count completed jobs, aborted
   jobs, and the byte length of the last job, from boot, and expose them via §11
   and §13.
-- **NFR-6.1** [Should] `[proposed]`: With a sink that accepts data at full
+- **NFR-6.1** [Should] `[user]`: With a sink that accepts data at full
   speed, sustained client-to-USB throughput shall be ≥ 300 KiB/s over a 10 MiB
   job.
 
@@ -444,7 +445,7 @@ printer status reported by §11 and §13.
 | otherwise | `ready` |
 
 - **FR-7.2** [Must] `[derived]`: The device shall refresh port status at least
-  every 5 s `[proposed]` while a printer is claimed, including during a job.
+  every 5 s while a printer is claimed, including during a job.
 - **FR-7.3** [Should] `[derived]`: The `printing` flag shall be true exactly
   while a job is RECEIVING, independent of the FR-7.1 state.
 
@@ -468,7 +469,7 @@ GET_DEVICE_ID (bRequest 0), GET_PORT_STATUS (1), SOFT_RESET (2).
 
 - **FR-8.1** [Must] `[user]`: The device shall claim the first printer-class
   interface of a device attached directly or through one hub within 5 s
-  `[proposed]` of attach.
+  of attach.
 - **FR-8.2** [Must] `[user]`: On claim the device shall read the IEEE 1284
   Device ID and extract `MFG`/`MANUFACTURER`, `MDL`/`MODEL`, and `CMD`/
   `COMMAND SET` fields.
@@ -606,7 +607,7 @@ verification:
   accept a manually entered SSID, WiFi password, admin password, and optional
   hostname and MQTT settings.
 - **FR-12.3** [Must] `[derived]`: Before persisting, the device shall test-join
-  the submitted network (AP+STA); on failure within 20 s `[proposed]` it shall
+  the submitted network (AP+STA); on failure within 20 s it shall
   show an error on the page, stay in `PROVISIONING`, and persist nothing.
 - **FR-12.4** [Must] `[derived]`: Submissions violating §19 validation (SSID
   1–32 bytes; WiFi password empty or 8–63 chars; admin password 8–64 chars)
@@ -637,7 +638,7 @@ disabled while the broker host setting is empty. Base topic
   publish the Appendix B status object to `mx320/<id>/state` (retained) within
   2 s of any change of printer state, `printing`, or job counters.
 - **FR-13.2** [Should] `[derived]`: The device shall also republish
-  `mx320/<id>/state` every 60 s `[proposed]`.
+  `mx320/<id>/state` every 60 s.
 - **FR-13.3** [Must] `[derived]`: The device shall publish `online` (retained) to
   `mx320/<id>/availability` on connect and register `offline` (retained) as its
   last-will.
@@ -650,7 +651,7 @@ disabled while the broker host setting is empty. Base topic
 - **FR-13.5** [Must] `[derived]`: Broker unavailability shall not affect
   printing.
 - **FR-13.6** [Must] `[derived]`: After the broker becomes reachable again the
-  device shall reconnect and publish current state within 30 s `[proposed]`.
+  device shall reconnect and publish current state within 30 s.
 
 ```yaml
 id: FR-13.5
@@ -693,7 +694,7 @@ Exercised via FR-2.11–FR-2.18 and §12.
 
 - **NFR-14.1** [Must] `[derived]`: In `OPERATIONAL` and idle, 19 of 20 mDNS A
   queries and 19 of 20 TCP connects to port 9100 shall be answered within
-  500 ms `[proposed]`. (Implementation note — power-save off — lives in the
+  500 ms. (Implementation note — power-save off — lives in the
   Method.)
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
@@ -721,7 +722,7 @@ via FR-2.17, FR-11.3–FR-11.6, FR-12.3.
 
 - **NFR-17.1** [Must] `[pack:esp32]`: The task watchdog shall supervise the job
   forwarder, USB client, HTTP server and main tasks, and reset the device when
-  any of them fails to check in for 10 s `[proposed]`; the next boot reports
+  any of them fails to check in for 10 s; the next boot reports
   reset reason `TASK_WDT`.
 - **NFR-17.2** [Must] `[derived]`: A printer stall (paper out) of 10 min during
   a job shall not trigger a watchdog reset.
@@ -832,7 +833,7 @@ Derived requirements:
   shall contain the WiFi, admin or MQTT password.
 - **NFR-22.3** [Should] `[derived]`: After 5 consecutive failed admin
   authentications the device shall reject authentication attempts for 60 s
-  `[proposed]` (returning 429).
+  (returning 429).
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
@@ -969,25 +970,20 @@ Required keys: all shown. `printer.status` ∈ {`absent`, `unknown`, `ready`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.0
+fsd_version: 0.1.1
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
 author: user + Claude (/define)
 reviewers: []
-approval_status: pending — proposed values below await acceptance
+approval_status: pending — OD-1/OD-2 accepted; OD-3/OD-4 open; udp_log_host default still proposed
 created: 2026-11-01
 last_updated: 2026-11-01
 change_history:
   - 0.1.0 2026-11-01 initial FSD
+  - 0.1.1 2026-11-01 OD-1 and OD-2 accepted by the user; values approved
 superseded_requirements: []
 open_decisions:
-  - id: OD-1
-    gates: [FR-2.10, FR-2.12, FR-2.13, FR-2.15, FR-6.3, FR-6.5, FR-6.6, FR-6.7, NFR-6.1, FR-7.2, FR-8.1, FR-12.3, FR-13.2, FR-13.6, NFR-14.1, NFR-17.1, NFR-22.3]
-    text: Accept or change the [proposed] numbers (10 s portal, 5 s services, 60 s backoff ceiling, 30 s WiFi recovery, backlog 2, 64 KiB buffer, 5 s abort, 300 s idle, 300 KiB/s, 5 s status poll, 5 s claim, 20 s test-join, 60 s republish, 30 s MQTT recovery, 500 ms answer time, 10 s watchdog, 5-fail/60 s lockout).
-  - id: OD-2
-    gates: [FR-2.13, FR-2.16]
-    text: Confirm that a device with wrong stored credentials retries forever and reaches the portal only via factory reset (no automatic portal fallback).
   - id: OD-3
     gates: [FR-7.1, FR-7.2]
     text: R3 — whether the MX320 maintains 1284 port-status bits; resolved at commissioning.
