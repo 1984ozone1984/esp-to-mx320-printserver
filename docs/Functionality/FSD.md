@@ -103,7 +103,12 @@ Every NFR-2.x constraint below is **[Must]**.
 
 Power: the XIAO and the hub are supplied by the hub's 5 V supply; the ESP32
 cannot source USB VBUS. How VBUS reaches the hub's upstream port is a
-commissioning question (§4, R1).
+commissioning question (§4, R1). **Bench power-off of the DUT** (the stimulus
+"power off DUT" / "power-cycle" in any contract) means: an operator, prompted
+through `/api/human-interaction`, disconnects the hub's 5 V supply and, for a
+power-cycle, reconnects it after 5 s. The MX320 keeps its own mains supply.
+The UART adapter stays powered from the bench and is not a power path to the
+XIAO (capability `dut-power-cycle`).
 
 ### 2.3 Software Architecture
 
@@ -623,7 +628,7 @@ verification:
 | FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical; inactive-slot SHA-256 (`/api/flash/read`) unchanged | Reboot mid-job; inactive slot written | bench |
 | FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) an image of 3 145 729 bytes (0x300001) | 400; no reboot; version unchanged | Boot into partial image | bench |
 | FR-11.7 | GET /settings and POST /settings, each without auth | Both 401; `/api/status` `config.*` unchanged | Settings page served; any field persisted | bench |
-| FR-11.9 | Valid credentials · POST hostname `mx320-new`, MQTT host/port/user/password of the HA broker, admin_pass `newpass12`; then reset | 200; at once: `config.mqtt_*` show the new values, the old admin password gets 401 and `newpass12` 200; after the reset: `config.hostname` = `mx320-new`, `mx320-new.local` resolves, `mqtt.connected: true` ≤ 30 s after `wifi: got ip` | A submitted field not persisted; admin change waiting for a reboot | bench |
+| FR-11.9 | DUT on the home WLAN (HA broker reachable), valid credentials · POST hostname `mx320-new`, MQTT host/port/user/password of the HA broker, admin_pass `newpass12`; then reset | 200; at once: `config.mqtt_*` show the new values, the old admin password gets 401 and `newpass12` 200; after the reset: `config.hostname` = `mx320-new`, `mx320-new.local` resolves, `mqtt.connected: true` ≤ 30 s after `wifi: got ip` | A submitted field not persisted; admin change waiting for a reboot | bench |
 | FR-11.8 | Valid credentials · POST one invalid field at a time together with one valid change to another field (MQTT port 1884; hostname `mx320-new` when the port is under test): hostname `bad host!` / 33 chars / `-x`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars; admin_pass 7 / 65 chars | Each 400 naming the field; the valid companion field still holds its old value in `config.*` | Partial persist; any invalid value accepted | host (validator) + bench |
 
 ## 12. Captive Portal
@@ -657,7 +662,7 @@ verification:
 |---|---|---|---|---|
 | FR-12.1 | PROVISIONING · join SoftAP, GET each OS probe: http://captive.apple.com/hotspot-detect.html (macOS, iOS), http://www.msftconnecttest.com/connecttest.txt (Windows), http://connectivitycheck.gstatic.com/generate_204 (Android), http://example.com/ | Each returns the setup page or a 302 to it | A probe getting its "online" answer (`Success`, `Microsoft Connect Test`, 204); DNS failure | bench |
 | FR-12.2 | Bench AP up · GET setup page | Scan list includes the bench AP SSID | Empty list while the bench AP is up | bench |
-| FR-12.8 | Submit all fields (manual SSID = bench AP, hostname `mx320-test`, MQTT host/port/user/password) | After provisioning, `/api/status` `config.hostname`/`mqtt_host`/`mqtt_port`/`mqtt_user` equal the submitted values; GET /settings with the submitted admin password returns 200; with the broker requiring that MQTT user/password (HA broker), `mqtt.connected: true` ≤ 30 s | A submitted field silently dropped; `mqtt.connected: false` with the right password | bench |
+| FR-12.8 | Submit all fields (manual SSID = home WLAN, where the HA broker is reachable; hostname `mx320-test`, MQTT host/port/user/password) | After provisioning, `/api/status` `config.hostname`/`mqtt_host`/`mqtt_port`/`mqtt_user` equal the submitted values; GET /settings with the submitted admin password returns 200; with the broker requiring that MQTT user/password (HA broker), `mqtt.connected: true` ≤ 30 s | A submitted field silently dropped; `mqtt.connected: false` with the right password | bench |
 | FR-12.3 | Submit bench SSID with wrong password | Error shown ≤ 20 s; still PROVISIONING; NVS has no creds after reboot | Credentials persisted | bench |
 | FR-12.4 | Submit, one invalid field at a time: SSID empty / 33 bytes; WiFi password 7 / 64 chars; admin password 7 / 65 chars; hostname `bad host!` / 33 chars / `-x`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars | Each rejected with an error naming its field; nothing persisted | Any of them accepted or persisted | host (validator) + bench |
 | FR-12.5 | OPERATIONAL · scan from bench | No `MX320-Setup-*` SSID | SoftAP visible | bench |
@@ -717,7 +722,7 @@ verification:
 | FR-13.1 | Subscribed · (a) start a job, (b) complete it, (c) set the sink's port status to paper-out, (d) abort a job (client RST) | A new retained state ≤ 2 s after each: (a) `printing: true`, (b) `job.completed` +1, (c) `printer.status: paper_out`, (d) `job.aborted` +1 | Message without retain flag; a message still showing the previous value | bench |
 | FR-13.2 | Idle 3 min | ≥ 3 state messages | Gap > 70 s | bench |
 | FR-13.3 | Subscribe · (a) reset DUT; (b) restart a broker that keeps no persistence (bench broker) while the DUT runs | Retained `online` (a) ≤ 5 s after `wifi: got ip`, (b) ≤ 30 s after the broker restart | No retained flag; `online` missing after the broker restart | bench |
-| FR-13.7 | Power off DUT | Broker publishes retained `offline` ≤ 45 s after power-off (1.5 × keepalive, MQTT 3.1.1 §3.1.2.10) | Retained `online` stays | bench |
+| FR-13.7 | Power off DUT (§2.2 bench power-off) | Broker publishes retained `offline` ≤ 45 s after power-off (1.5 × keepalive, MQTT 3.1.1 §3.1.2.10) | Retained `online` stays | bench |
 | FR-13.4 | (a) DUT connects; (b) restart a broker that keeps no persistence while the DUT runs · read retained `homeassistant/#` after each | Five configs, schema-valid, same device block — (b) ≤ 30 s after the broker restart | Discovery for non-listed entities; configs missing after the broker restart | host (builder) + bench |
 | FR-13.6 | see FR-13.5 contract | — | — | bench |
 
@@ -755,7 +760,7 @@ via FR-2.17, FR-11.3–FR-11.6, FR-12.3.
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| NFR-16.1 | Provisioned DUT · OTA to new version, then power-cycle | Rejoins WLAN; `config.hostname`, `config.mqtt_host`, `config.mqtt_port`, `config.mqtt_user` unchanged in `/api/status` | SoftAP started; a setting at default | bench |
+| NFR-16.1 | Provisioned DUT · OTA to new version, then power-cycle (§2.2) | Rejoins WLAN; `config.hostname`, `config.mqtt_host`, `config.mqtt_port`, `config.mqtt_user` unchanged in `/api/status` | SoftAP started; a setting at default | bench |
 
 ## 17. RTOS and Task Watchdog
 
@@ -1065,7 +1070,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.12
+fsd_version: 0.1.13
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1088,6 +1093,7 @@ change_history:
   - 0.1.10 2026-11-01 Load-defined round 8 (minor only): lockout shared across admin endpoints; mqtt_pass observed via mqtt.connected; FR-2.19 per-state means; FR-19.3 network precondition
   - 0.1.11 2026-11-01 Load-defined round 9 (minor only): FR-11.9 positive settings change; factory-reset defaults observed; FR-2.16 timing; FR-20.2 per phase; lockout threshold pinned; OD-4 gate list complete
   - 0.1.12 2026-11-01 Load-defined round 10 (minor only): online/discovery re-published after a broker restart observed; every portal and admin response captured for password echoes
+  - 0.1.13 2026-11-01 Load-defined round 11 (minor only): bench power-off defined (§2.2); HA-broker contracts run on the home WLAN
 superseded_requirements: []
 open_decisions:
   - id: OD-3

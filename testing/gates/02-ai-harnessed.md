@@ -8,9 +8,9 @@
 
 | # | Must be true | Where to look | Evidence |
 |---|---|---|---|
-| 1 | Test plan exists with bench capabilities `yes`/`no` as the bench declares and project-side ones `unproven` (or `no` with consequence) | `testing/test-plan.yaml` | `bench-*` entries; `dut-on-slot`, `dut-boot-en`, `usb-host-hub-power`, `printer-mx320`, `printer-port-status`, `printer-detach`, `mx320-job-file`, `lan-clients`, `home-wlan`, `ha-broker`, `operator`, `release-verification` = unproven; `usb-printer-sink` = no with consequence |
+| 1 | Test plan exists with bench capabilities `yes`/`no` as the bench declares and project-side ones `unproven` (or `no` with consequence) | `testing/test-plan.yaml` | `bench-*` entries; `dut-on-slot`, `dut-boot-en`, `usb-host-hub-power`, `printer-mx320`, `printer-port-status`, `printer-detach`, `mx320-job-file`, `lan-clients`, `home-wlan`, `ha-broker`, `operator`, `release-verification`, `dut-power-cycle` = unproven; `usb-printer-sink` = no with consequence |
 | 2 | Journey seeded, one test per step | same | JRN-01.1 … JRN-01.7, `shape: workflow`, `kind: standard`, `wave: 1`, each `verifies:` naming IDs that exist in the FSD, `impl: null`, `status: not done` |
-| 3 | Debugging agenda matches the unproven/no project capabilities | `testing/debugging-agenda.md` | 12 rows; every project-side capability named by at least one row |
+| 3 | Debugging agenda matches the unproven/no project capabilities | `testing/debugging-agenda.md` | 13 rows; every project-side capability named by at least one row |
 | 4 | Testing standard is one file with rules + shared procedures | `docs/Method/standards/testing.md` | "Rules that hold for every run", P-PROVISION, P-SINK-JOB |
 | 5 | Firmware contains only the skeleton + UDP log | `main/`, `components/` | Only `components/udp_log`; `main/app_main.c` calls netif/event init, optional `udp_log_init`, logs `Init complete`. No WiFi, USB host, HTTP, MQTT, mDNS, NVS or OTA code or REQUIRES yet (those are /build's waves) |
 | 6 | Build constraints match FSD §23 | `sdkconfig.defaults`, `partitions.csv`, `CMakeLists.txt` | 8 MB flash, octal PSRAM, UART console, no secondary console, partition offsets 0x9000/0xF000/0x11000/0x20000/0x320000, cmake ≥ 3.22 |
