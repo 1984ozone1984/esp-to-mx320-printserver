@@ -663,7 +663,7 @@ disabled while the broker host setting is empty. Base topic
   publish `online` (retained) to `mx320/<id>/availability`.
 - **FR-13.7** [Must] `[derived]`: The device shall register `offline`
   (retained) on `mx320/<id>/availability` as its MQTT last-will, with an MQTT
-  keepalive of 30 s `[proposed]`.
+  keepalive of 30 s.
 - **FR-13.4** [Should] `[pack:esp32]`: On each broker connect the device shall
   publish retained Home Assistant discovery configs under
   `homeassistant/<component>/mx320_<id>/<object>/config` for: printer state
@@ -961,7 +961,7 @@ requirement IDs in these chapters and the entries in `testing/test-plan.yaml`.
 | SoftAP | SSID `MX320-Setup-<id>`, open, 192.168.4.1/24, channel 1 |
 | UDP log | `<udp_log_host>:5555` |
 | MQTT base | `mx320/<id>` |
-| MQTT keepalive | 30 s `[proposed]` (OD-5) |
+| MQTT keepalive | 30 s |
 | USB printer class | class 0x07, subclass 0x01; GET_DEVICE_ID 0, GET_PORT_STATUS 1, SOFT_RESET 2 |
 | Canon VID | 0x04A9 (A1) |
 
@@ -1001,13 +1001,13 @@ Required keys: all shown. `printer.status` ∈ {`absent`, `unknown`, `ready`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.3
+fsd_version: 0.1.4
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
 author: user + Claude (/define)
 reviewers: []
-approval_status: pending — OD-1/OD-2 accepted; OD-3/OD-4/OD-5 open; udp_log_host default still proposed
+approval_status: pending — OD-1/OD-2/OD-5 accepted; OD-3/OD-4 open; udp_log_host default still proposed
 created: 2026-11-01
 last_updated: 2026-11-01
 change_history:
@@ -1015,6 +1015,7 @@ change_history:
   - 0.1.1 2026-11-01 OD-1 and OD-2 accepted by the user; values approved
   - 0.1.2 2026-11-01 Load-defined gate findings: split FR-6.4/6.5/6.9/8.5/13.3 (new FR-6.10–6.13, FR-8.8, FR-13.7); provenance on state rows; retry marker; phase exits resequenced; A2/A3 bound
   - 0.1.3 2026-11-01 Load-defined round 2: watchdog per task (NFR-17.3–17.5), FR-8.2 split (FR-8.9), markers `usb: hub depth exceeded` and `portal: test-join ok`, keepalive proposed (OD-5), contract names aligned to Appendix B
+  - 0.1.4 2026-11-01 OD-5 accepted by the user: MQTT keepalive 30 s
 superseded_requirements: []
 open_decisions:
   - id: OD-3
@@ -1023,9 +1024,6 @@ open_decisions:
   - id: OD-4
     gates: [FR-6.1, FR-6.5, FR-6.8, FR-6.10, NFR-6.1, FR-8.5–FR-8.8, NFR-17.2]
     text: Availability of a USB printer-class sink on the bench (A3); without it these contracts can only run against the real MX320 and lose byte-exactness.
-  - id: OD-5
-    gates: [FR-13.7]
-    text: Accept or change the proposed MQTT keepalive of 30 s (offline visible in HA ≤ 45 s after power loss).
 related_test_baseline: testing/test-plan.yaml
 ```
 
