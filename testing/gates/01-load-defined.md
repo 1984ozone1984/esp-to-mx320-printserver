@@ -49,4 +49,6 @@ comm -23 <(grep -oE '\*\*N?FR-[0-9]+\.[0-9]+\*\*' $F | tr -d '*' | sort -u) \
 - A precondition such as "credentials stored" must be reachable with the scope of the phase whose exit lists the requirement.
 - A test-only shortcut (seeded credentials, a debug hook) must not make another contract's precondition unreachable — e.g. seeding credentials makes PROVISIONING unreachable on a test build.
 - Every defined marker or enum value must have something that produces it (the §20 marker table names the stimulus); a value no event can produce is dead specification.
+- A phase exit listing a requirement whose contract has several cases must say which cases that phase can run ("FR-7.2 (idle case a)").
+- Anything a phase's tests rely on — a test hook, a password, a credential path — must be in that phase's scope and defined in the FSD, not assumed.
 - A deadline expressed through another parameter ("after keepalive expiry") is only falsifiable if that parameter has a stated value.

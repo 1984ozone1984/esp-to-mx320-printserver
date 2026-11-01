@@ -256,10 +256,13 @@ Each phase is entered using only what earlier phases delivered.
   boot banner; NVS; TWDT; lifecycle decision function; WiFi STA with
   credentials stored in NVS through the test build's UART credential command
   (FR-19.1 — no credentials are compiled into any image); WiFi recovery; UDP log;
-  HTTP `/api/status` (version, boot_count, reset_reason, state); OTA endpoint
-  (§11) with a build-time admin password.
+  HTTP `/api/status` (`fw`, `boot_count`, `reset_reason`, `state`,
+  `heap_free`); OTA endpoint (§11) authenticated by an admin password stored
+  through the test build's UART `admin` command (FR-19.3); test-build watchdog
+  fault-injection endpoint `/api/test/hang` (NFR-17.x, absent from release
+  builds by NFR-17.6).
 - **Deliverables:** firmware flashed via the UART adapter; OTA path proven.
-- **Exit:** FR-5.1, FR-19.1, FR-19.2, FR-2.11, FR-2.12 (HTTP only), FR-2.13, FR-2.16, FR-2.20,
+- **Exit:** FR-5.1, FR-19.1, FR-19.2, FR-19.3, NFR-17.6, FR-2.11, FR-2.12 (HTTP only), FR-2.13, FR-2.16, FR-2.20,
   FR-11.3, FR-11.4, FR-11.6, NFR-17.1, NFR-17.5,
   FR-18.1 (banner + `/api/status`), FR-20.1–FR-20.2 (Phase 1 rows of the §20 marker table), NFR-23.1 pass.
 - **Depends on:** commissioning of the UART adapter wiring and bench AP (Phase 2
@@ -269,7 +272,7 @@ Each phase is entered using only what earlier phases delivered.
 
 - **Scope:** USB host + hub support; printer-class client (§8); status
   derivation (§7); printer fields in `/api/status`.
-- **Exit:** FR-8.1–FR-8.4, FR-8.8, FR-8.9, FR-7.1–FR-7.2, NFR-2.7, NFR-17.3,
+- **Exit:** FR-8.1–FR-8.4, FR-8.8, FR-8.9, FR-7.1, FR-7.2 (idle case a), NFR-2.7, NFR-17.3,
   FR-20.1 (Phase 2 rows of the §20 marker table) pass;
   printer identity of the real MX320 visible in `/api/status`.
 - **Depends on:** Phase 1 (`/api/status`, OTA, logging); commissioning of the
@@ -281,7 +284,7 @@ Each phase is entered using only what earlier phases delivered.
   status page (FR-11.1).
 - **Exit:** FR-6.x (FR-6.9, FR-6.11, FR-6.12 via `/api/status`), NFR-6.1,
   FR-9.x, FR-10.x, FR-7.3, FR-8.5–FR-8.7, FR-2.15,
-  FR-11.1, FR-11.5, NFR-14.1, NFR-17.4, NFR-17.2, FR-2.14, FR-20.1 (Phase 3 rows of the §20 marker table)
+  FR-7.2 (mid-job case b), FR-11.1, FR-11.5, NFR-14.1, NFR-17.4, NFR-17.2, FR-2.14, FR-20.1 (Phase 3 rows of the §20 marker table)
   pass at bench tier against the USB sink and the real MX320; acceptance AT-1
   (macOS) and AT-2 (Windows) pass.
 - **Depends on:** Phase 2 (printer link), Phase 1 (WiFi, HTTP).
@@ -508,7 +511,7 @@ GET_DEVICE_ID (bRequest 0), GET_PORT_STATUS (1), SOFT_RESET (2).
 | FR-8.2 | Sink with Device ID `MFG:TestCo;MDL:Sink 1;` attached (or the MX320) | `/api/status` `printer.mfg`/`mdl` equal the device's values ≤ 5 s after claim | `mdl` null or stale from a previous printer | bench |
 | FR-8.9 | Feed sample 1284 strings (incl. long-key form, missing fields, no trailing `;`) | Parser returns MFG/MDL/CMD per sample | Crash; read past length | host |
 | FR-8.3 | Printer claimed · detach | `absent` ≤ 2 s | DUT reboot | bench |
-| FR-8.4 | Detach, re-attach 10× | Claimed each time ≤ 5 s; boot_count unchanged | Reboot; leaked handles (heap drops > 4 KiB over 10 cycles) | bench |
+| FR-8.4 | Detach, re-attach 10× | Claimed each time ≤ 5 s; boot_count unchanged | Reboot; leaked handles (`heap_free` drops > 4 KiB over 10 cycles) | bench |
 | FR-8.5 | Attach only a USB flash drive on the hub | No `usb: printer claimed`; `printer.present` false | Drive claimed | bench |
 | FR-8.8 | Printer claimed · attach then detach a flash drive | `printer.present` stays true; no `usb: printer absent` | Printer released | bench |
 | FR-8.6 | Sink set to, in turn: (a) zero-length Device ID, (b) STALL on GET_DEVICE_ID, (c) `\x00\xff;;` with no MFG/MDL keys | Each: claimed, `printer.mdl` = `unknown`, a 1 KiB job completes | Interface rejected; crash | bench |
@@ -552,7 +555,7 @@ querier on the LAN.
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | FR-10.1 | OPERATIONAL · `dns-sd -G v4 <hostname>.local` / avahi-resolve | Resolves to STA IP | Any other address (e.g. 192.168.4.1) | bench |
-| FR-10.2 | Printer present · browse `_pdl-datastream._tcp` | Instance found with exact TXT keys/values; TXT-builder unit test passes | Missing key; port ≠ 9100 | host + bench |
+| FR-10.2 | Printer present · browse `_pdl-datastream._tcp` | Instance named `<MDL> @ <hostname>` found with exact TXT keys/values; TXT-builder unit test passes | Other instance name; missing key; port ≠ 9100 | host + bench |
 | FR-10.3 | Detach printer | Service removed from browse ≤ 5 s | Service lingers | bench |
 | FR-10.4 | Browse `_http._tcp` | Instance on port 80 | Port ≠ 80; instance missing | bench |
 
@@ -593,7 +596,7 @@ verification:
   expected_observations:
     - HTTP 200.
     - Reboot within 5 s (log `boot: fw=V2`).
-    - /api/status reports version V2, reset_reason SW.
+    - /api/status reports `fw` = V2, `reset_reason` = SW.
   timing: reboot ≤ 5 s after the 200
   tolerance: +2 s
   prohibited_outcomes:
@@ -609,10 +612,10 @@ verification:
 | FR-11.1 | GET / | 200, HTML containing the six fields | Password values present | bench |
 | FR-11.2 | GET /api/status | Valid against Appendix B schema; ≤ 2 s | Missing required key | host (serializer) + bench |
 | FR-11.4 | POST image, no / wrong auth | 401; running partition and inactive slot hash unchanged | Flash write | bench |
-| FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical | Reboot mid-job | bench |
+| FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical; inactive-slot SHA-256 (`/api/flash/read`) unchanged | Reboot mid-job; inactive slot written | bench |
 | FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) an image of 3 145 729 bytes (0x300001) | 400; no reboot; version unchanged | Boot into partial image | bench |
 | FR-11.7 | GET /settings and POST /settings, each without auth | Both 401; `/api/status` `config.*` unchanged | Settings page served; any field persisted | bench |
-| FR-11.8 | Valid credentials · POST one invalid field at a time together with MQTT port 1884: hostname `bad host!` / 33 chars / `-x`; mqtt_host 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars; admin_pass 7 / 65 chars | Each 400 naming the field; `config.mqtt_port` still the old value | Partial persist; any invalid value accepted | host (validator) + bench |
+| FR-11.8 | Valid credentials · POST one invalid field at a time together with one valid change to another field (MQTT port 1884; hostname `mx320-new` when the port is under test): hostname `bad host!` / 33 chars / `-x`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars; admin_pass 7 / 65 chars | Each 400 naming the field; the valid companion field still holds its old value in `config.*` | Partial persist; any invalid value accepted | host (validator) + bench |
 
 ## 12. Captive Portal
 
@@ -642,11 +645,11 @@ verification:
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| FR-12.1 | PROVISIONING · join SoftAP, GET http://example.com/ | Setup page or 302 to it | DNS failure | bench |
+| FR-12.1 | PROVISIONING · join SoftAP, GET each OS probe: http://captive.apple.com/hotspot-detect.html (macOS, iOS), http://www.msftconnecttest.com/connecttest.txt (Windows), http://connectivitycheck.gstatic.com/generate_204 (Android), http://example.com/ | Each returns the setup page or a 302 to it | A probe getting its "online" answer (`Success`, `Microsoft Connect Test`, 204); DNS failure | bench |
 | FR-12.2 | Bench AP up · GET setup page | Scan list includes the bench AP SSID | Empty list while the bench AP is up | bench |
-| FR-12.8 | Submit all fields (manual SSID = bench AP, hostname `mx320-test`, MQTT host/port/user/password) | After provisioning, `/api/status` `config.hostname`/`mqtt_host`/`mqtt_port`/`mqtt_user` equal the submitted values | A submitted optional field silently dropped | bench |
+| FR-12.8 | Submit all fields (manual SSID = bench AP, hostname `mx320-test`, MQTT host/port/user/password) | After provisioning, `/api/status` `config.hostname`/`mqtt_host`/`mqtt_port`/`mqtt_user` equal the submitted values; GET /settings with the submitted admin password returns 200 | A submitted field silently dropped | bench |
 | FR-12.3 | Submit bench SSID with wrong password | Error shown ≤ 20 s; still PROVISIONING; NVS has no creds after reboot | Credentials persisted | bench |
-| FR-12.4 | Submit, one invalid field at a time: SSID empty / 33 bytes; WiFi password 7 / 64 chars; admin password 7 / 65 chars; hostname `bad host!` / 33 chars / `-x`; mqtt_host 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars | Each rejected with an error naming its field; nothing persisted | Any of them accepted or persisted | host (validator) + bench |
+| FR-12.4 | Submit, one invalid field at a time: SSID empty / 33 bytes; WiFi password 7 / 64 chars; admin password 7 / 65 chars; hostname `bad host!` / 33 chars / `-x`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars | Each rejected with an error naming its field; nothing persisted | Any of them accepted or persisted | host (validator) + bench |
 | FR-12.5 | OPERATIONAL · scan from bench | No `MX320-Setup-*` SSID | SoftAP visible | bench |
 | FR-12.6 | Submit form with error; inspect response | Password fields empty | Password value in HTML | bench |
 | FR-12.7 | `strings` on release image | Bench SSID/password absent | Present | other (CI) |
@@ -701,7 +704,7 @@ verification:
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| FR-13.1 | Subscribed · (a) start a job, (b) complete it, (c) set the sink's port status to paper-out | A new retained state ≤ 2 s after each: (a) `printing: true`, (b) `job.completed` +1, (c) `printer.status: paper_out` | Message without retain flag; a message still showing the previous value | bench |
+| FR-13.1 | Subscribed · (a) start a job, (b) complete it, (c) set the sink's port status to paper-out, (d) abort a job (client RST) | A new retained state ≤ 2 s after each: (a) `printing: true`, (b) `job.completed` +1, (c) `printer.status: paper_out`, (d) `job.aborted` +1 | Message without retain flag; a message still showing the previous value | bench |
 | FR-13.2 | Idle 3 min | ≥ 3 state messages | Gap > 70 s | bench |
 | FR-13.3 | Subscribe, reset DUT | Retained `online` ≤ 5 s after `wifi: got ip` | No retained flag | bench |
 | FR-13.7 | Power off DUT | Broker publishes retained `offline` ≤ 45 s after power-off (1.5 × keepalive, MQTT 3.1.1 §3.1.2.10) | Retained `online` stays | bench |
@@ -753,6 +756,8 @@ via FR-2.17, FR-11.3–FR-11.6, FR-12.3.
   task.
 - **NFR-17.4** [Must] `[pack:esp32]`: As NFR-17.1, for the job forwarder task.
 - **NFR-17.5** [Must] `[pack:esp32]`: As NFR-17.1, for the HTTP server task.
+- **NFR-17.6** [Must] `[derived]`: A release build shall answer any request to
+  `/api/test/hang` with 404 and hang no task.
 - **NFR-17.2** [Must] `[derived]`: A printer stall (paper out) of 10 min during
   a job shall not trigger a watchdog reset.
 
@@ -772,7 +777,7 @@ verification:
   prohibited_outcomes:
     - DUT stays hung (no reset within 15 s).
     - Reset reason reported as anything other than TASK_WDT.
-    - Release image exposes the hang endpoint (checked separately in CI).
+    - Release image exposes the hang endpoint (NFR-17.6).
   tier: bench
   evidence: [trigger timestamp, UART log incl. panic output, /api/status after]
   cleanup: [flash baseline release image]
@@ -783,6 +788,7 @@ verification:
 | NFR-17.3 | As NFR-17.1 contract, `task=usb` | reset ≤ 12 s; reset_reason TASK_WDT | DUT stays hung | bench |
 | NFR-17.4 | As NFR-17.1 contract, `task=forwarder` | reset ≤ 12 s; reset_reason TASK_WDT | DUT stays hung | bench |
 | NFR-17.5 | As NFR-17.1 contract, `task=http` | reset ≤ 12 s; reset_reason TASK_WDT | DUT stays hung | bench |
+| NFR-17.6 | Release build · GET `/api/test/hang?task=main`, wait 15 s | 404; `boot_count` unchanged | Any reset; any 2xx | bench |
 | NFR-17.2 | Sink paused 10 min during a job | No reset; job completes after resume | reset_reason TASK_WDT | bench |
 
 # Part D — Cross-cutting Concerns
@@ -806,7 +812,7 @@ verification:
 |---|---|---|---|---|---|---|---|---|
 | `wifi_ssid` | string | none | 1–32 bytes | NVS | operational | portal | next boot | cleared |
 | `wifi_pass` | string | none | empty (open) or 8–63 chars | NVS | secret | portal | next boot | cleared |
-| `admin_pass` | string | none | 8–64 chars | NVS | secret | portal, /settings | immediate | cleared |
+| `admin_pass` | string | none | 8–64 chars | NVS | secret | portal, /settings, test-build UART (FR-19.3) | immediate | cleared |
 | `hostname` | string | `mx320-<id>` | 1–32 chars `[a-z0-9-]`, not starting/ending `-` | NVS | public | portal, /settings | next boot | default |
 | `mqtt_host` | string | empty (MQTT off) | empty, IPv4 dotted quad, or DNS name ≤ 64 chars | NVS | operational | portal, /settings | next MQTT connect | cleared |
 | `mqtt_port` | int | 1883 | 1–65535 | NVS | public | portal, /settings | next MQTT connect | default |
@@ -820,11 +826,15 @@ verification:
   credentials in NVS, and log `cred: stored`.
 - **FR-19.2** [Must] `[derived]`: A release build shall ignore the `cred` console
   line and change nothing in NVS.
+- **FR-19.3** [Must] `[derived]`: A test build shall accept the UART0 console
+  line `admin <password>` (8–64 chars), store it as `admin_pass`, and log
+  `admin: stored`; a release build shall ignore it (as FR-19.2).
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | FR-19.1 | Test build, NVS erased, PROVISIONING · write `cred <bench SSID> <pass>` via `/api/serial/write`, reset | `cred: stored`; after reset `state: CONNECTING` then `wifi: got ip` | `state: PROVISIONING` after the reset | bench |
 | FR-19.2 | Release build, NVS erased · write the same line, reset | No `cred: stored`; after reset `state: PROVISIONING` | Any NVS change; `state: CONNECTING` | bench |
+| FR-19.3 | Test build · write `admin testpass1`; then GET /settings with `admin:testpass1`; release build · same line | Test build: `admin: stored`, GET 200. Release build: no `admin: stored`, GET with that password 401 | Release build accepting the password | bench |
 
 Each validation rule owes a negative test (FR-11.8, FR-12.4); each persistence
 rule owes a persistence test (NFR-16.1, FR-2.17).
@@ -849,6 +859,7 @@ datagrams to `<udp_log_host>:5555` (testbench UDP log).
 | `wifi: lost` | bench AP disabled while OPERATIONAL | 1 |
 | `wifi: retry in <n> s` | bench AP stopped, credentials stored, reset | 1 |
 | `cred: stored` | test build, UART `cred <ssid> <password>` | 1 |
+| `admin: stored` | test build, UART `admin <password>` | 1 |
 | `usb: printer claimed vid=<hex> pid=<hex> mdl=<MDL>` | printer attached | 2 |
 | `usb: printer absent` | printer detached | 2 |
 | `usb: hub depth exceeded` | printer behind two cascaded hubs | 2 |
@@ -1035,7 +1046,7 @@ Required keys: all shown. `printer.status` ∈ {`absent`, `unknown`, `ready`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.6
+fsd_version: 0.1.7
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1052,6 +1063,7 @@ change_history:
   - 0.1.4 2026-11-01 OD-5 accepted by the user: MQTT keepalive 30 s
   - 0.1.5 2026-11-01 Load-defined round 3: test-build NVS seeding (FR-19.1), FR-12.2 split (FR-12.8), Appendix B `config` object, FR-2.14 action narrowed to job abort, contracts cover every trigger/rule/marker
   - 0.1.6 2026-11-01 Load-defined round 4: UART credential command (FR-19.1/19.2) replaces compile-time seeding; marker table with stimulus and phase; FR-2.20 IP-lost row; per-rule validation and per-state factory-reset stimuli
+  - 0.1.7 2026-11-01 Load-defined round 5: FR-7.2 split across Phase 2/3 exits; test-build UART admin password (FR-19.3) and hang hook in Phase 1 scope; NFR-17.6 release has no hang endpoint; remaining coverage refinements
 superseded_requirements: []
 open_decisions:
   - id: OD-3

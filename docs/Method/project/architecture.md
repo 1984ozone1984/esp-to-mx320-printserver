@@ -41,7 +41,7 @@ ESP-IDF project; one component per FSD component, named by layer:
   has space (FSD FR-6.5).
 - Bulk-IN is drained continuously and discarded (FSD §1 non-goals).
 - The watchdog fault-injection endpoint `/api/test/hang` and the UART `cred`
-  console command exist only under `CONFIG_PRINTSERVER_TEST_BUILD`; the release
+  and `admin` console commands exist only under `CONFIG_PRINTSERVER_TEST_BUILD`; the release
   `sdkconfig.defaults` leaves it unset (FSD FR-19.1/19.2, NFR-17.1). No WiFi
   credential is ever compiled into an image — CI artefacts of this public repo
   are downloadable.

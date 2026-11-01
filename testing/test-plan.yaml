@@ -243,7 +243,7 @@ tests:
     reason: test not written
 
 gates:
-  load-defined:       {verdict: SHUT, date: 2026-11-01, commit: 3353142}   # fresh checker round 4; rounds 1-3 SHUT
+  load-defined:       {verdict: SHUT, date: 2026-11-01, commit: d6170bc}   # fresh checker round 5 (1 blocking, 9 minor); rounds 1-4 SHUT
   ai-harnessed:       {verdict: SHUT, date: 2026-11-01, commit: 6587fb1}   # fresh checker round 2: load-defined verdict unrecorded; round 1 SHUT at cdb85f1 (release-verification declared yes)
   dut-ready:          {verdict: null, date: null, commit: null}
   ready-for-shipment: {verdict: null, date: null, commit: null}
