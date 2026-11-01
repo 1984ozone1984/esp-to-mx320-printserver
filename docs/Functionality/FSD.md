@@ -95,7 +95,7 @@ build settings):
 |---|---|---|---|---|
 | NFR-2.1–2.3 | `esptool chip_id` + `flash_id` via UART adapter; boot log | Chip ESP32-S3, flash 8 MB, PSRAM 8 MB reported at boot | Boot continues without PSRAM | bench (commissioning) |
 | NFR-2.4 | Reset DUT, read UART adapter | Boot banner at 115200 on GPIO43 | Banner only on USB-Serial/JTAG | bench |
-| NFR-2.5 | Attach printer to USB-C via hub | FR-8.1 passes | — | bench |
+| NFR-2.5 | Attach printer to USB-C via hub | FR-8.1 passes | Console output on the USB-C port | bench |
 | NFR-2.6 | Running · hold BOOT (GPIO0) 11 s | `reset: factory` logged (FR-2.17) | `reset: factory` with BOOT untouched | bench |
 | NFR-2.7 | Printer behind two cascaded hubs | Printer not claimed; log `usb: hub depth exceeded` | Crash | bench |
 
@@ -133,7 +133,7 @@ Transition table — **the table is normative; every row is a requirement**
 | FR-2.11 | `BOOT` | NVS read | credentials present | `CONNECTING` | Start STA | ≤ 2 s after reset | `[derived]` |
 | FR-2.12 | `CONNECTING` | got IPv4 | — | `OPERATIONAL` | Start RAW port (if printer present), mDNS, HTTP, MQTT | services up ≤ 5 s after IP | `[derived]` |
 | FR-2.13 | `CONNECTING` | connect fails / timeout | — | `CONNECTING` | Retry with backoff 1, 2, 4 … 60 s, unbounded | ceiling 60 s | `[user]` (OD-2) |
-| FR-2.14 | `OPERATIONAL` | STA disconnected or IP lost | — | `WIFI_RECOVERY` | Abort active job (§6), stop RAW listener, mDNS, MQTT | ≤ 2 s | `[derived]` |
+| FR-2.14 | `OPERATIONAL` | STA disconnected or IP lost | — | `WIFI_RECOVERY` | Abort active job (§6) | ≤ 2 s | `[derived]` |
 | FR-2.15 | `WIFI_RECOVERY` | got IPv4 | — | `OPERATIONAL` | Restart services as FR-2.12 | RAW port accepting ≤ 30 s after AP returns | `[derived]` |
 | FR-2.16 | `WIFI_RECOVERY` | connect fails | — | `WIFI_RECOVERY` | Retry, backoff as FR-2.13 | ceiling 60 s | `[user]` (OD-2) |
 | FR-2.17 | any but `BOOT` | BOOT held ≥ 10 s | — | `FACTORY_RESET` | Erase user config (§19), reboot | reboot ≤ 3 s after threshold | `[pack:esp32]` |
@@ -215,10 +215,10 @@ verification:
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.4.1/` returns 200 ≤ 10 s after reset | DUT joins any other network | bench |
-| FR-2.11 | Credentials stored · reset | Log `state: CONNECTING` ≤ 2 s after reset | SoftAP started | target |
-| FR-2.12 | Credentials stored, AP up · reset | `/api/status` 200 and mDNS answers ≤ 5 s after `wifi: got ip` | Services announced before IP | bench |
-| FR-2.13 | Credentials for an absent SSID · reset | `wifi: retry in <n> s` lines with n and their spacing 1,2,4,…,60,60 s (±20 %) for 5 min | SoftAP started; reboot | bench |
-| FR-2.14 | Job in progress · AP disabled | Log `job: abort reason=wifi` ≤ 2 s; MQTT/mDNS stopped | DUT reboots | bench |
+| FR-2.11 | Credentials stored (FR-19.1 seeding or portal) · reset | Log `state: CONNECTING` ≤ 2 s after reset | SoftAP started | target |
+| FR-2.12 | Credentials stored, AP up, printer present, broker configured · reset | Each ≤ 5 s after `wifi: got ip`: `/api/status` 200; mDNS A answer; TCP :9100 accepts; retained `online` on the broker (Phase 1 exit: `/api/status` only) | A service answering before `wifi: got ip` | bench |
+| FR-2.13 | Credentials for the bench AP stored; bench AP stopped · reset | `wifi: retry in <n> s` lines with n and their spacing 1,2,4,…,60,60 s (±20 %) for 5 min | SoftAP started; reboot | bench |
+| FR-2.14 | Job in progress · AP disabled | UART `state: WIFI_RECOVERY` and `job: abort id=<n> reason=wifi` ≤ 2 s after AP disable | DUT reboots; job later reported DONE | bench |
 | FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | `wifi: retry in <n> s` lines show n = 1, 2, 4 … capped at 60 | Reboot; SoftAP | bench |
 | FR-2.18 | PROVISIONING · submit valid form for the bench AP | SoftAP gone and `wifi: got ip` ≤ 5 s after `portal: test-join ok` | Credentials persisted before test-join succeeded | bench |
 | FR-2.19 | OPERATIONAL · hold BOOT 9 s | No state change; config unchanged; no reboot | `reset: factory` logged | bench |
@@ -253,11 +253,13 @@ Each phase is entered using only what earlier phases delivered.
 - **Scope:** build skeleton for ESP32-S3 with §23 constraints; UART0 console;
   boot banner; NVS; TWDT; lifecycle decision function; WiFi STA with
   compile-time **test** credentials (bench AP or home WLAN — a test-build
-  option, removed from release by FR-12.7 in Phase 4); WiFi recovery; UDP log;
+  option, removed from release by FR-12.7 in Phase 4) which a test build writes
+  to NVS on a boot that finds none (FR-19.1), so the FR-2.11 guard "credentials
+  present" holds from the second boot on; WiFi recovery; UDP log;
   HTTP `/api/status` (version, boot_count, reset_reason, state); OTA endpoint
   (§11) with a build-time admin password.
 - **Deliverables:** firmware flashed via the UART adapter; OTA path proven.
-- **Exit:** FR-5.1, FR-2.11, FR-2.12 (HTTP only), FR-2.13, FR-2.16,
+- **Exit:** FR-5.1, FR-19.1, FR-2.11, FR-2.12 (HTTP only), FR-2.13, FR-2.16,
   FR-11.3, FR-11.4, FR-11.6, NFR-17.1, NFR-17.5,
   FR-18.1 (banner + `/api/status`), FR-20.1–FR-20.2 (`boot:`, `state:`,
   `wifi:` markers), NFR-23.1 pass.
@@ -311,8 +313,8 @@ Each phase is entered using only what earlier phases delivered.
 
 **Assumptions**
 - A1 (assumed): the MX320 enumerates with an interface of class 0x07
-  subclass 0x01 (USB printer class); VID 0x04A9 (Canon). Confirm at
-  commissioning with the real printer.
+  subclass 0x01 (USB printer class); VID 0x04A9 (Canon). Resolved by
+  debugging-agenda item 4.
 - A2 (assumed): the home WLAN is 2.4 GHz WPA2-PSK with DHCP; the Mac and PC are
   on the same L2 segment (mDNS reaches them). Resolved by debugging-agenda
   item 11.
@@ -413,7 +415,7 @@ verification:
     - Detach the printer (hub port power off or cable pull) at ~50 % of the job.
   expected_observations:
     - Client sees connection reset ≤ 5 s after detach.
-    - Log `job: abort reason=usb` and `job.aborted` incremented.
+    - Log `job: abort id=<n> reason=usb` and `job.aborted` incremented.
     - After re-attach (FR-8.4), a new 1 MiB job prints byte-identical.
   timing: 5 s from detach to TCP RST
   tolerance: +1 s
@@ -440,7 +442,7 @@ verification:
 | FR-6.11 | Abort 1 job (client RST) | `job.aborted` +1 | `job.completed` changes | bench |
 | FR-6.12 | Complete a 123 456-byte job | `job.last_bytes` = 123456 | Value from an aborted job | bench |
 | FR-6.13 | Send job, close | Device FIN ≤ 1 s after `job: done` | Connection left half-open > 1 s | bench |
-| NFR-6.1 | Sink at full speed · 10 MiB job | Throughput ≥ 300 KiB/s client-measured | — | bench |
+| NFR-6.1 | Sink at full speed · 10 MiB job | Throughput ≥ 300 KiB/s client-measured over the whole job | Sink receives fewer bytes than sent | bench |
 
 ## 7. Printer Status Derivation
 
@@ -610,9 +612,9 @@ verification:
 | FR-11.2 | GET /api/status | Valid against Appendix B schema; ≤ 2 s | Missing required key | host (serializer) + bench |
 | FR-11.4 | POST image, no / wrong auth | 401; running partition and inactive slot hash unchanged | Flash write | bench |
 | FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical | Reboot mid-job | bench |
-| FR-11.6 | Valid credentials · POST truncated / ESP32-C3 / 3.1 MB image | 400; no reboot; version unchanged | Boot into partial image | bench |
-| FR-11.7 | GET /settings and POST /settings, each without auth | Both 401; `/api/status` config unchanged | Settings page served; any field persisted | bench |
-| FR-11.8 | POST hostname `bad host!` + valid MQTT port | 400 naming `hostname`; MQTT port unchanged | Partial persist | host (validator) + bench |
+| FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) a 3.1 MB image | 400; no reboot; version unchanged | Boot into partial image | bench |
+| FR-11.7 | GET /settings and POST /settings, each without auth | Both 401; `/api/status` `config.*` unchanged | Settings page served; any field persisted | bench |
+| FR-11.8 | POST hostname `bad host!` + MQTT port 1884 | 400 naming `hostname`; `config.mqtt_port` still the old value | Partial persist | host (validator) + bench |
 
 ## 12. Captive Portal
 
@@ -623,9 +625,11 @@ verification:
 - **FR-12.1** [Must] `[user]`: In `PROVISIONING`, an HTTP GET to any host via
   the SoftAP shall return the setup page or a redirect to it (captive-portal
   detection on macOS, Windows, iOS, Android).
-- **FR-12.2** [Must] `[user]`: The setup page shall list SSIDs from a scan and
-  accept a manually entered SSID, WiFi password, admin password, and optional
-  hostname and MQTT settings.
+- **FR-12.2** [Must] `[user]`: The setup page shall list the SSIDs found by a
+  WiFi scan.
+- **FR-12.8** [Must] `[user]`: The setup form shall accept a manually entered
+  SSID, WiFi password and admin password, and optional hostname and MQTT host,
+  port, user and password.
 - **FR-12.3** [Must] `[derived]`: Before persisting, the device shall test-join
   the submitted network (AP+STA); on failure within 20 s it shall
   show an error on the page, stay in `PROVISIONING`, and persist nothing.
@@ -641,9 +645,10 @@ verification:
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | FR-12.1 | PROVISIONING · join SoftAP, GET http://example.com/ | Setup page or 302 to it | DNS failure | bench |
-| FR-12.2 | GET setup page | Scan list includes the bench AP; manual SSID field present | — | bench |
+| FR-12.2 | Bench AP up · GET setup page | Scan list includes the bench AP SSID | Empty list while the bench AP is up | bench |
+| FR-12.8 | Submit all fields (manual SSID = bench AP, hostname `mx320-test`, MQTT host/port/user/password) | After provisioning, `/api/status` `config.hostname`/`mqtt_host`/`mqtt_port`/`mqtt_user` equal the submitted values | A submitted optional field silently dropped | bench |
 | FR-12.3 | Submit bench SSID with wrong password | Error shown ≤ 20 s; still PROVISIONING; NVS has no creds after reboot | Credentials persisted | bench |
-| FR-12.4 | Submit admin password of 7 chars | Field error; nothing persisted | Credentials persisted | host (validator) + bench |
+| FR-12.4 | Submit, separately: SSID of 33 bytes; WiFi password of 7 chars; admin password of 7 chars | Each rejected with an error naming its field; nothing persisted | Any of the three accepted or persisted | host (validator) + bench |
 | FR-12.5 | OPERATIONAL · scan from bench | No `MX320-Setup-*` SSID | SoftAP visible | bench |
 | FR-12.6 | Submit form with error; inspect response | Password fields empty | Password value in HTML | bench |
 | FR-12.7 | `strings` on release image | Bench SSID/password absent | Present | other (CI) |
@@ -698,7 +703,7 @@ verification:
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| FR-13.1 | Subscribed · complete a job | New retained state with counters +1 ≤ 2 s | Message without retain flag; message still showing the old count | bench |
+| FR-13.1 | Subscribed · (a) start a job, (b) complete it, (c) set the sink's port status to paper-out | A new retained state ≤ 2 s after each: (a) `printing: true`, (b) `job.completed` +1, (c) `printer.status: paper_out` | Message without retain flag; a message still showing the previous value | bench |
 | FR-13.2 | Idle 3 min | ≥ 3 state messages | Gap > 70 s | bench |
 | FR-13.3 | Subscribe, reset DUT | Retained `online` ≤ 5 s after `wifi: got ip` | No retained flag | bench |
 | FR-13.7 | Power off DUT | Broker publishes retained `offline` ≤ 45 s after power-off (1.5 × keepalive, MQTT 3.1.1 §3.1.2.10) | Retained `online` stays | bench |
@@ -739,7 +744,7 @@ via FR-2.17, FR-11.3–FR-11.6, FR-12.3.
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| NFR-16.1 | Provisioned DUT · OTA to new version, then power-cycle | Rejoins WLAN; hostname/MQTT settings unchanged in `/api/status` | SoftAP started; a setting at default | bench |
+| NFR-16.1 | Provisioned DUT · OTA to new version, then power-cycle | Rejoins WLAN; `config.hostname`, `config.mqtt_host`, `config.mqtt_port`, `config.mqtt_user` unchanged in `/api/status` | SoftAP started; a setting at default | bench |
 
 ## 17. RTOS and Task Watchdog
 
@@ -812,6 +817,15 @@ verification:
 | `udp_log_host` | IPv4 | build-time: empty in release, `192.168.8.70` in test builds `[proposed]` | IPv4 dotted quad or empty | build-time | public | build | rebuild | n/a |
 | `boot_count` | uint32 | 0 | — | NVS | public | read-only | each boot +1 | retained |
 
+- **FR-19.1** [Must] `[derived]`: A test build (`CONFIG_PRINTSERVER_TEST_BUILD`)
+  that boots with no WiFi credentials in NVS shall write its compile-time
+  credentials to NVS before the lifecycle reads them; a release build shall
+  never do so (FR-12.7).
+
+| ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
+|---|---|---|---|---|
+| FR-19.1 | Test build, NVS erased · reset twice | Both boots log `state: CONNECTING`; second boot's `/api/status` `configured: true` | `state: PROVISIONING` on either boot | bench |
+
 Each validation rule owes a negative test (FR-11.8, FR-12.4); each persistence
 rule owes a persistence test (NFR-16.1, FR-2.17).
 
@@ -833,8 +847,8 @@ datagrams to `<udp_log_host>:5555` (testbench UDP log).
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| FR-20.1 | Run boot → print → detach sequence | All listed markers in UART log in order | Marker missing | bench |
-| FR-20.2 | Same, test build | Same markers in `/api/udplog` | — | bench |
+| FR-20.1 | Run, in turn, the stimuli of FR-2.10, FR-2.11, FR-2.13, FR-2.14, FR-2.17, FR-2.18, FR-6.4, FR-6.6, FR-8.1, FR-8.3, FR-8.7, NFR-2.7 | Each marker appears on UART, in the format listed, during the stimulus that produces it | A marker in another format; a marker without its event | bench |
+| FR-20.2 | Same, test build, OPERATIONAL | Every marker emitted while OPERATIONAL also in `/api/udplog` | A UART marker missing from the UDP log | bench |
 
 ## 21. Error Handling
 
@@ -989,6 +1003,7 @@ requirement IDs in these chapters and the entries in `testing/test-plan.yaml`.
   "printing": false,
   "job": { "buffered_bytes": 0, "completed": 4, "aborted": 0, "last_bytes": 1048576 },
   "mqtt": { "enabled": true, "connected": true },
+  "config": { "hostname": "mx320-a1b2c3", "mqtt_host": "192.168.8.10", "mqtt_port": 1883, "mqtt_user": "printer" },
   "heap_free": 180000
 }
 ```
@@ -1001,7 +1016,7 @@ Required keys: all shown. `printer.status` ∈ {`absent`, `unknown`, `ready`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.4
+fsd_version: 0.1.5
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1016,6 +1031,7 @@ change_history:
   - 0.1.2 2026-11-01 Load-defined gate findings: split FR-6.4/6.5/6.9/8.5/13.3 (new FR-6.10–6.13, FR-8.8, FR-13.7); provenance on state rows; retry marker; phase exits resequenced; A2/A3 bound
   - 0.1.3 2026-11-01 Load-defined round 2: watchdog per task (NFR-17.3–17.5), FR-8.2 split (FR-8.9), markers `usb: hub depth exceeded` and `portal: test-join ok`, keepalive proposed (OD-5), contract names aligned to Appendix B
   - 0.1.4 2026-11-01 OD-5 accepted by the user: MQTT keepalive 30 s
+  - 0.1.5 2026-11-01 Load-defined round 3: test-build NVS seeding (FR-19.1), FR-12.2 split (FR-12.8), Appendix B `config` object, FR-2.14 action narrowed to job abort, contracts cover every trigger/rule/marker
 superseded_requirements: []
 open_decisions:
   - id: OD-3

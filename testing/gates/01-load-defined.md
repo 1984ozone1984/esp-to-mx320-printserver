@@ -45,4 +45,6 @@ comm -23 <(grep -oE '\*\*N?FR-[0-9]+\.[0-9]+\*\*' $F | tr -d '*' | sort -u) \
 - A contract row whose stimulus needs a capability from a later phase (printer, RAW port, MQTT, provisioning) makes its phase exit unenterable — check the exit lists against §3 scopes, not just the IDs.
 - A contract that observes a log line must use a marker FR-20.1 defines; a contract that observes a status field must use an Appendix B key (`job.completed`, not `jobs_completed`).
 - One requirement covering several tasks, endpoints or verbs (GET *and* POST) needs a stimulus for each, or a split.
+- A requirement naming several rejection conditions or triggers ("bad magic, wrong chip, > 3 MB"; "state, printing or counters") needs a stimulus for each named one — not a substitute ("truncated").
+- A precondition such as "credentials stored" must be reachable with the scope of the phase whose exit lists the requirement.
 - A deadline expressed through another parameter ("after keepalive expiry") is only falsifiable if that parameter has a stated value.
