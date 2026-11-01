@@ -96,7 +96,7 @@ build settings):
 | NFR-2.1–2.3 | `esptool chip_id` + `flash_id` via UART adapter; boot log | Chip ESP32-S3, flash 8 MB, PSRAM 8 MB reported at boot | Boot continues without PSRAM | bench (commissioning) |
 | NFR-2.4 | Reset DUT, read UART adapter | Boot banner at 115200 on GPIO43 | Banner only on USB-Serial/JTAG | bench |
 | NFR-2.5 | Attach printer to USB-C via hub | FR-8.1 passes | — | bench |
-| NFR-2.6 | Press BOOT while running | Log `button: down` / `button: up` (test build) | — | bench |
+| NFR-2.6 | Running · hold BOOT (GPIO0) 11 s | `reset: factory` logged (FR-2.17) | `reset: factory` with BOOT untouched | bench |
 | NFR-2.7 | Printer behind two cascaded hubs | Printer not claimed; log `usb: hub depth exceeded` | Crash | bench |
 
 Power: the XIAO and the hub are supplied by the hub's 5 V supply; the ESP32
@@ -220,7 +220,7 @@ verification:
 | FR-2.13 | Credentials for an absent SSID · reset | `wifi: retry in <n> s` lines with n and their spacing 1,2,4,…,60,60 s (±20 %) for 5 min | SoftAP started; reboot | bench |
 | FR-2.14 | Job in progress · AP disabled | Log `job: abort reason=wifi` ≤ 2 s; MQTT/mDNS stopped | DUT reboots | bench |
 | FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | `wifi: retry in <n> s` lines show n = 1, 2, 4 … capped at 60 | Reboot; SoftAP | bench |
-| FR-2.18 | PROVISIONING · submit valid form for the bench AP | SoftAP gone and `wifi: got ip` ≤ 5 s after test-join log | Credentials persisted before test-join succeeded | bench |
+| FR-2.18 | PROVISIONING · submit valid form for the bench AP | SoftAP gone and `wifi: got ip` ≤ 5 s after `portal: test-join ok` | Credentials persisted before test-join succeeded | bench |
 | FR-2.19 | OPERATIONAL · hold BOOT 9 s | No state change; config unchanged; no reboot | `reset: factory` logged | bench |
 
 ### 2.4 Component Layering
@@ -258,7 +258,7 @@ Each phase is entered using only what earlier phases delivered.
   (§11) with a build-time admin password.
 - **Deliverables:** firmware flashed via the UART adapter; OTA path proven.
 - **Exit:** FR-5.1, FR-2.11, FR-2.12 (HTTP only), FR-2.13, FR-2.16,
-  FR-11.3, FR-11.4, FR-11.6, NFR-17.1 (main task),
+  FR-11.3, FR-11.4, FR-11.6, NFR-17.1, NFR-17.5,
   FR-18.1 (banner + `/api/status`), FR-20.1–FR-20.2 (`boot:`, `state:`,
   `wifi:` markers), NFR-23.1 pass.
 - **Depends on:** commissioning of the UART adapter wiring and bench AP (Phase 2
@@ -268,7 +268,8 @@ Each phase is entered using only what earlier phases delivered.
 
 - **Scope:** USB host + hub support; printer-class client (§8); status
   derivation (§7); printer fields in `/api/status`.
-- **Exit:** FR-8.1–FR-8.4, FR-8.8, FR-7.1–FR-7.2, FR-20.1 (`usb:` markers) pass;
+- **Exit:** FR-8.1–FR-8.4, FR-8.8, FR-8.9, FR-7.1–FR-7.2, NFR-2.7, NFR-17.3,
+  FR-20.1 (`usb: printer claimed`, `usb: printer absent`, `usb: hub depth exceeded`) pass;
   printer identity of the real MX320 visible in `/api/status`.
 - **Depends on:** Phase 1 (`/api/status`, OTA, logging); commissioning of the
   ESP32 → hub → MX320 power/VBUS arrangement (R1, R2).
@@ -279,7 +280,7 @@ Each phase is entered using only what earlier phases delivered.
   status page (FR-11.1).
 - **Exit:** FR-6.x (FR-6.9, FR-6.11, FR-6.12 via `/api/status`), NFR-6.1,
   FR-9.x, FR-10.x, FR-7.3, FR-8.5–FR-8.7, FR-2.15,
-  FR-11.1, FR-11.5, NFR-14.1, NFR-17.1 (all tasks), NFR-17.2, FR-20.1 (`job:` markers)
+  FR-11.1, FR-11.5, NFR-14.1, NFR-17.4, NFR-17.2, FR-20.1 (`job:` markers, `usb: soft_reset`)
   pass at bench tier against the USB sink and the real MX320; acceptance AT-1
   (macOS) and AT-2 (Windows) pass.
 - **Depends on:** Phase 2 (printer link), Phase 1 (WiFi, HTTP).
@@ -290,7 +291,8 @@ Each phase is entered using only what earlier phases delivered.
   factory reset (FR-2.17, FR-2.19), MQTT + HA discovery (§13), remove the
   compile-time bench credentials (FR-12.7).
 - **Exit:** FR-2.10, FR-2.12 (all services), FR-2.14, FR-2.17–FR-2.19,
-  FR-11.2 (full Appendix B schema), NFR-16.1, FR-11.7,
+  FR-11.2 (full Appendix B schema), NFR-16.1, NFR-2.6, FR-20.1 (`reset: factory`,
+  `portal: test-join ok`), FR-11.7,
   FR-11.8, FR-12.x, FR-13.x, FR-18.1 (MQTT), NFR-22.x and every
   remaining Must/Should pass; AT-3 and AT-4 pass.
 - **Depends on:** Phase 3 (job state to publish), Phase 1 (NVS, HTTP).
@@ -411,7 +413,7 @@ verification:
     - Detach the printer (hub port power off or cable pull) at ~50 % of the job.
   expected_observations:
     - Client sees connection reset ≤ 5 s after detach.
-    - Log `job: abort reason=usb` and jobs_aborted incremented.
+    - Log `job: abort reason=usb` and `job.aborted` incremented.
     - After re-attach (FR-8.4), a new 1 MiB job prints byte-identical.
   timing: 5 s from detach to TCP RST
   tolerance: +1 s
@@ -483,9 +485,10 @@ GET_DEVICE_ID (bRequest 0), GET_PORT_STATUS (1), SOFT_RESET (2).
 - **FR-8.1** [Must] `[user]`: The device shall claim the first printer-class
   interface of a device attached directly or through one hub within 5 s
   of attach.
-- **FR-8.2** [Must] `[user]`: On claim the device shall read the IEEE 1284
-  Device ID and extract `MFG`/`MANUFACTURER`, `MDL`/`MODEL`, and `CMD`/
-  `COMMAND SET` fields.
+- **FR-8.2** [Must] `[user]`: On claim the device shall read the printer's
+  IEEE 1284 Device ID (GET_DEVICE_ID).
+- **FR-8.9** [Must] `[derived]`: The Device ID parser shall extract the
+  `MFG`/`MANUFACTURER`, `MDL`/`MODEL` and `CMD`/`COMMAND SET` values.
 - **FR-8.3** [Must] `[derived]`: The device shall report the printer `absent`
   within 2 s of detach.
 - **FR-8.4** [Must] `[derived]`: A printer re-attached after detach shall be
@@ -502,7 +505,8 @@ GET_DEVICE_ID (bRequest 0), GET_PORT_STATUS (1), SOFT_RESET (2).
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | FR-8.1 | DUT running · attach MX320 via hub | Log `usb: printer claimed vid=04a9 pid=…` ≤ 5 s; `/api/status` printer present | Claim of the scanner interface | bench |
-| FR-8.2 | Feed sample 1284 strings (incl. long-key form, missing fields, no trailing `;`) | Parser returns MFG/MDL/CMD per sample | Crash; read past length | host |
+| FR-8.2 | Sink with Device ID `MFG:TestCo;MDL:Sink 1;` attached (or the MX320) | `/api/status` `printer.mfg`/`mdl` equal the device's values ≤ 5 s after claim | `mdl` null or stale from a previous printer | bench |
+| FR-8.9 | Feed sample 1284 strings (incl. long-key form, missing fields, no trailing `;`) | Parser returns MFG/MDL/CMD per sample | Crash; read past length | host |
 | FR-8.3 | Printer claimed · detach | `absent` ≤ 2 s | DUT reboot | bench |
 | FR-8.4 | Detach, re-attach 10× | Claimed each time ≤ 5 s; boot_count unchanged | Reboot; leaked handles (heap drops > 4 KiB over 10 cycles) | bench |
 | FR-8.5 | Attach only a USB flash drive on the hub | No `usb: printer claimed`; `printer.present` false | Drive claimed | bench |
@@ -550,7 +554,7 @@ querier on the LAN.
 | FR-10.1 | OPERATIONAL · `dns-sd -G v4 <hostname>.local` / avahi-resolve | Resolves to STA IP | Any other address (e.g. 192.168.4.1) | bench |
 | FR-10.2 | Printer present · browse `_pdl-datastream._tcp` | Instance found with exact TXT keys/values; TXT-builder unit test passes | Missing key; port ≠ 9100 | host + bench |
 | FR-10.3 | Detach printer | Service removed from browse ≤ 5 s | Service lingers | bench |
-| FR-10.4 | Browse `_http._tcp` | Instance on port 80 | — | bench |
+| FR-10.4 | Browse `_http._tcp` | Instance on port 80 | Port ≠ 80; instance missing | bench |
 
 ## 11. HTTP Status, Settings & OTA
 
@@ -607,7 +611,7 @@ verification:
 | FR-11.4 | POST image, no / wrong auth | 401; running partition and inactive slot hash unchanged | Flash write | bench |
 | FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical | Reboot mid-job | bench |
 | FR-11.6 | Valid credentials · POST truncated / ESP32-C3 / 3.1 MB image | 400; no reboot; version unchanged | Boot into partial image | bench |
-| FR-11.7 | POST /settings without auth | 401; `/api/status` config unchanged | Any field persisted | bench |
+| FR-11.7 | GET /settings and POST /settings, each without auth | Both 401; `/api/status` config unchanged | Settings page served; any field persisted | bench |
 | FR-11.8 | POST hostname `bad host!` + valid MQTT port | 400 naming `hostname`; MQTT port unchanged | Partial persist | host (validator) + bench |
 
 ## 12. Captive Portal
@@ -658,7 +662,8 @@ disabled while the broker host setting is empty. Base topic
 - **FR-13.3** [Must] `[derived]`: On each broker connect the device shall
   publish `online` (retained) to `mx320/<id>/availability`.
 - **FR-13.7** [Must] `[derived]`: The device shall register `offline`
-  (retained) on `mx320/<id>/availability` as its MQTT last-will.
+  (retained) on `mx320/<id>/availability` as its MQTT last-will, with an MQTT
+  keepalive of 30 s `[proposed]`.
 - **FR-13.4** [Should] `[pack:esp32]`: On each broker connect the device shall
   publish retained Home Assistant discovery configs under
   `homeassistant/<component>/mx320_<id>/<object>/config` for: printer state
@@ -679,13 +684,13 @@ verification:
     - Stop the broker; while stopped send a 5 MiB job; restart broker after 60 s.
   expected_observations:
     - Job completes byte-identical while broker is down.
-    - FR-13.6 - state message with updated jobs_completed ≤ 30 s after broker restart.
+    - FR-13.6 - state message with updated `job.completed` ≤ 30 s after broker restart.
   timing: 30 s from broker restart to fresh state message (FR-13.6)
   tolerance: +5 s
   prohibited_outcomes:
     - RAW port refuses or aborts the job.
     - DUT reboots.
-    - Stale state (old jobs_completed) published as the recovery message.
+    - Stale state (old `job.completed`) published as the recovery message.
   tier: bench
   evidence: [broker stop/start timestamps, sink hash, MQTT capture, /api/status boot_count]
   cleanup: [broker running]
@@ -696,7 +701,7 @@ verification:
 | FR-13.1 | Subscribed · complete a job | New retained state with counters +1 ≤ 2 s | Message without retain flag; message still showing the old count | bench |
 | FR-13.2 | Idle 3 min | ≥ 3 state messages | Gap > 70 s | bench |
 | FR-13.3 | Subscribe, reset DUT | Retained `online` ≤ 5 s after `wifi: got ip` | No retained flag | bench |
-| FR-13.7 | Power off DUT | Broker publishes retained `offline` after keepalive expiry | Retained `online` stays | bench |
+| FR-13.7 | Power off DUT | Broker publishes retained `offline` ≤ 45 s after power-off (1.5 × keepalive, MQTT 3.1.1 §3.1.2.10) | Retained `online` stays | bench |
 | FR-13.4 | Connect; read retained `homeassistant/#` | Five configs, schema-valid, same device block | Discovery for non-listed entities | host (builder) + bench |
 | FR-13.6 | see FR-13.5 contract | — | — | bench |
 
@@ -738,10 +743,13 @@ via FR-2.17, FR-11.3–FR-11.6, FR-12.3.
 
 ## 17. RTOS and Task Watchdog
 
-- **NFR-17.1** [Must] `[pack:esp32]`: The task watchdog shall supervise the job
-  forwarder, USB client, HTTP server and main tasks, and reset the device when
-  any of them fails to check in for 10 s; the next boot reports
-  reset reason `TASK_WDT`.
+- **NFR-17.1** [Must] `[pack:esp32]`: When the main task fails to check in
+  with the task watchdog for 10 s, the device shall reset, and the next boot
+  shall report reset reason `TASK_WDT`.
+- **NFR-17.3** [Must] `[pack:esp32]`: As NFR-17.1, for the USB printer client
+  task.
+- **NFR-17.4** [Must] `[pack:esp32]`: As NFR-17.1, for the job forwarder task.
+- **NFR-17.5** [Must] `[pack:esp32]`: As NFR-17.1, for the HTTP server task.
 - **NFR-17.2** [Must] `[derived]`: A printer stall (paper out) of 10 min during
   a job shall not trigger a watchdog reset.
 
@@ -749,9 +757,9 @@ via FR-2.17, FR-11.3–FR-11.6, FR-12.3.
 id: NFR-17.1
 verification:
   preconditions:
-    - DUT running a test build with the fault-injection hook (`/api/test/hang?task=forwarder`, test build only).
+    - DUT running a test build with the fault-injection hook (`/api/test/hang?task=<main|usb|forwarder|http>`, test build only).
   stimulus:
-    - Trigger the hang in the forwarder task.
+    - Trigger the hang with `task=main` (NFR-17.3: `usb`, NFR-17.4: `forwarder`, NFR-17.5: `http` — same contract, same observations).
   expected_observations:
     - Reset within 10 s (+2 s) of the trigger.
     - After reboot /api/status reset_reason = TASK_WDT, boot_count +1.
@@ -769,6 +777,9 @@ verification:
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
+| NFR-17.3 | As NFR-17.1 contract, `task=usb` | reset ≤ 12 s; reset_reason TASK_WDT | DUT stays hung | bench |
+| NFR-17.4 | As NFR-17.1 contract, `task=forwarder` | reset ≤ 12 s; reset_reason TASK_WDT | DUT stays hung | bench |
+| NFR-17.5 | As NFR-17.1 contract, `task=http` | reset ≤ 12 s; reset_reason TASK_WDT | DUT stays hung | bench |
 | NFR-17.2 | Sink paused 10 min during a job | No reset; job completes after resume | reset_reason TASK_WDT | bench |
 
 # Part D — Cross-cutting Concerns
@@ -814,7 +825,8 @@ datagrams to `<udp_log_host>:5555` (testbench UDP log).
   `state: <STATE>`, `wifi: got ip <ip>`, `wifi: lost`, `wifi: retry in <n> s`,
   `usb: printer claimed vid=<hex> pid=<hex> mdl=<MDL>`, `usb: printer absent`,
   `usb: soft_reset`, `job: start id=<n>`, `job: done id=<n> bytes=<n>`,
-  `job: abort id=<n> reason=<usb|wifi|client|ota>`, `reset: factory`.
+  `job: abort id=<n> reason=<usb|wifi|client|ota>`, `reset: factory`,
+  `usb: hub depth exceeded`, `portal: test-join ok`.
 - **FR-20.2** [Should] `[derived]`: When `udp_log_host` is set and the device is
   `OPERATIONAL`, every FR-20.1 marker shall also arrive at the UDP log.
 - No log line shall contain the WiFi, admin or MQTT password (NFR-22.2).
@@ -949,6 +961,7 @@ requirement IDs in these chapters and the entries in `testing/test-plan.yaml`.
 | SoftAP | SSID `MX320-Setup-<id>`, open, 192.168.4.1/24, channel 1 |
 | UDP log | `<udp_log_host>:5555` |
 | MQTT base | `mx320/<id>` |
+| MQTT keepalive | 30 s `[proposed]` (OD-5) |
 | USB printer class | class 0x07, subclass 0x01; GET_DEVICE_ID 0, GET_PORT_STATUS 1, SOFT_RESET 2 |
 | Canon VID | 0x04A9 (A1) |
 
@@ -988,19 +1001,20 @@ Required keys: all shown. `printer.status` ∈ {`absent`, `unknown`, `ready`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.2
+fsd_version: 0.1.3
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
 author: user + Claude (/define)
 reviewers: []
-approval_status: pending — OD-1/OD-2 accepted; OD-3/OD-4 open; udp_log_host default still proposed
+approval_status: pending — OD-1/OD-2 accepted; OD-3/OD-4/OD-5 open; udp_log_host default still proposed
 created: 2026-11-01
 last_updated: 2026-11-01
 change_history:
   - 0.1.0 2026-11-01 initial FSD
   - 0.1.1 2026-11-01 OD-1 and OD-2 accepted by the user; values approved
   - 0.1.2 2026-11-01 Load-defined gate findings: split FR-6.4/6.5/6.9/8.5/13.3 (new FR-6.10–6.13, FR-8.8, FR-13.7); provenance on state rows; retry marker; phase exits resequenced; A2/A3 bound
+  - 0.1.3 2026-11-01 Load-defined round 2: watchdog per task (NFR-17.3–17.5), FR-8.2 split (FR-8.9), markers `usb: hub depth exceeded` and `portal: test-join ok`, keepalive proposed (OD-5), contract names aligned to Appendix B
 superseded_requirements: []
 open_decisions:
   - id: OD-3
@@ -1009,7 +1023,10 @@ open_decisions:
   - id: OD-4
     gates: [FR-6.1, FR-6.5, FR-6.8, FR-6.10, NFR-6.1, FR-8.5–FR-8.8, NFR-17.2]
     text: Availability of a USB printer-class sink on the bench (A3); without it these contracts can only run against the real MX320 and lose byte-exactness.
-related_test_baseline: testing/test-plan.yaml (not yet created — Phase 1 of the journey)
+  - id: OD-5
+    gates: [FR-13.7]
+    text: Accept or change the proposed MQTT keepalive of 30 s (offline visible in HA ≤ 45 s after power loss).
+related_test_baseline: testing/test-plan.yaml
 ```
 
 ## Related

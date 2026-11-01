@@ -221,7 +221,7 @@ tests:
     tier: bench
     verifies: [FR-9.1, FR-6.1, FR-6.4, FR-6.9]
     needs: [mx320-job-file, operator, bench-operator-prompt]
-    observable: job file sent to <ip>:9100 and closed; log `job: done bytes=<file size>`; /api/status jobs.completed +1; operator confirms the known page printed
+    observable: job file sent to <ip>:9100 and closed; log `job: done bytes=<file size>`; /api/status job.completed +1; operator confirms the known page printed
     impl: null
     status: not done
     reason: test not written
@@ -234,7 +234,7 @@ tests:
     tier: bench
     verifies: [FR-13.1, FR-13.3]
     needs: [ha-broker]
-    observable: retained `mx320/<id>/availability` = online and `mx320/<id>/state` with jobs.completed equal to the value after JRN-01.6
+    observable: retained `mx320/<id>/availability` = online and `mx320/<id>/state` with job.completed equal to the value after JRN-01.6
     impl: null
     status: not done
     reason: test not written

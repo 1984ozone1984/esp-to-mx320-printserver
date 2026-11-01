@@ -43,4 +43,6 @@ comm -23 <(grep -oE '\*\*N?FR-[0-9]+\.[0-9]+\*\*' $F | tr -d '*' | sort -u) \
 - FR-2.10–FR-2.19 live in the state table and the compact table under it; FR-2.19 appears only in the compact table.
 - The `udp_log_host` default in §19 is still `[proposed]` (not part of OD-1).
 - A contract row whose stimulus needs a capability from a later phase (printer, RAW port, MQTT, provisioning) makes its phase exit unenterable — check the exit lists against §3 scopes, not just the IDs.
-- A contract that observes a log line must use a marker FR-20.1 defines.
+- A contract that observes a log line must use a marker FR-20.1 defines; a contract that observes a status field must use an Appendix B key (`job.completed`, not `jobs_completed`).
+- One requirement covering several tasks, endpoints or verbs (GET *and* POST) needs a stimulus for each, or a split.
+- A deadline expressed through another parameter ("after keepalive expiry") is only falsifiable if that parameter has a stated value.
