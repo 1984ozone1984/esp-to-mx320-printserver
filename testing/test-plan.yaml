@@ -1,0 +1,243 @@
+# MX320 WiFi Print Server — test plan. Owned by /build.
+#
+# Every test, what it needs, and what it last produced. Status is written by
+# whatever ran the test, never by hand: not done | successful | failed, with the
+# commit it ran against. "Blocked" is computed from `needs` against
+# `capabilities`, never typed.
+#
+# Contract: docs/Functionality/FSD.md · Rules: docs/Method/standards/testing.md
+
+project: mx320-printserver
+fsd: docs/Functionality/FSD.md
+dut:
+  board: Seeed XIAO ESP32-S3
+  chip: esp32s3
+  flash: 8MB              # FSD NFR-2.2
+  psram: 8MB octal        # FSD NFR-2.3
+  console: UART0 GPIO43/44 via a USB-UART adapter on a bench slot (FSD NFR-2.4)
+  slot: null              # assigned by /commission; tests find the DUT by MAC
+  mac: null               # recorded by /commission
+testbench:
+  # Dated observation, not an address to hard-code: tests take TESTBENCH_URL
+  # from the environment.
+  hostname: testbench-de09
+  last_seen_ip: 192.168.8.70
+  url: http://192.168.8.70:8080
+  harness_ref: db6a093    # Embedded-AI-Harness commit pinned in .devcontainer/Dockerfile
+  last_seen: 2026-11-01   # GET /api/info
+
+capabilities:
+  # --- Bench capabilities: declared by the testbench (Harness-FSD Appendix D)
+  # and taken at face value; a project never proves them. Open bench issues
+  # that limit them are recorded with their consequence for this project.
+  bench-flash:
+    what: Flash images at explicit offsets through POST /api/flash (bridge-chip boards)
+    available: yes
+    limitation: >-
+      Embedded-AI-Harness#52 — only the first option of a flash_args line is applied
+      (images flashed at 40 MHz). Consequence: none for correctness; boot timing may
+      differ from a USB-flashed unit.
+  bench-serial-monitor:
+    what: Capture DUT console lines with pattern match and a recorded buffer (/api/serial/monitor, /api/serial/output)
+    available: yes
+    limitation: >-
+      Embedded-AI-Harness#57 — the first boot after /api/flash is not recorded.
+      Consequence: tests reset once after flashing before reading the boot marker.
+  bench-serial-reset:
+    what: Hard-reset the DUT through POST /api/serial/reset (DTR/RTS or EN GPIO)
+    available: yes
+  bench-gpio:
+    what: Drive Pi GPIO 16-27 high/low/high-Z (POST /api/gpio/set) — used to hold the DUT's BOOT button line
+    available: yes
+  bench-wifi-ap:
+    what: Start and stop the bench SoftAP on demand (/api/wifi/ap_start, ap_stop) — AP outages for WiFi-recovery tests
+    available: yes
+    limitation: >-
+      Embedded-AI-Harness#54 — the bench AP refuses re-authentication from a station
+      that reset; #61 — ap_status.stations stays empty. Consequence: tests that reboot
+      the DUT on the bench AP restart the AP first; station presence is read from the
+      DUT's own /api/status, not from ap_status.
+  bench-wifi-sta:
+    what: Join a DUT SoftAP as a station and relay HTTP through it (/api/wifi/sta_join, /api/wifi/http) — captive-portal provisioning
+    available: yes
+    limitation: >-
+      Embedded-AI-Harness#56 — TestbenchDriver.enter_portal() does not match
+      /api/enter-portal. Consequence: provisioning uses sta_join + /api/wifi/http
+      directly (procedure P-PROVISION).
+  bench-wifi-scan:
+    what: WiFi scan from the bench radio (GET /api/wifi/scan)
+    available: yes
+    limitation: >-
+      Embedded-AI-Harness#50 — refuses while the bench AP runs; no BSSID. Consequence:
+      SoftAP-absent checks (FR-12.5) scan with the bench AP stopped.
+  bench-udplog:
+    what: Receive DUT UDP log lines on port 5555 (GET /api/udplog)
+    available: yes
+  bench-mqtt-broker:
+    what: Start/stop the mosquitto test broker on the bench (/api/mqtt/start, stop) — broker outages
+    available: yes
+    limitation: >-
+      Embedded-AI-Harness#59 — the broker never writes its log. Consequence: broker
+      outage timestamps come from the test's own start/stop calls.
+  bench-usb-power-cycle:
+    what: Switch a slot's USB power off and on
+    available: no
+    limitation: >-
+      Embedded-AI-Harness#51 (open). Consequence: none directly — the printer hangs off
+      the DUT's own hub, not a bench slot; printer detach uses `printer-detach`.
+  bench-operator-prompt:
+    what: Block on an operator yes/no answered in the portal UI (POST /api/human-interaction)
+    available: yes
+  bench-test-progress:
+    what: Live test-session progress on the portal (/api/test/update)
+    available: yes
+
+  # --- Project-side: unproven until observed working here. Each is an item on
+  # testing/debugging-agenda.md; /commission flips it to yes (or records no
+  # with its consequence).
+  dut-on-slot:
+    what: The XIAO ESP32-S3 sits on a bench slot through a USB-UART adapter on D6/D7, accepts a flash at flash_args offsets, and its UART console is readable
+    available: unproven
+  dut-boot-en:
+    what: Bench GPIO18/17 drive the XIAO's GPIO0 (BOOT) and EN — download mode, reset, and the 10 s factory-reset hold (FR-2.17)
+    available: unproven
+  usb-host-hub-power:
+    what: With the XIAO on the active hub's upstream port, the hub enables its downstream ports and the ESP sees devices attach (FSD R1)
+    available: unproven
+  printer-mx320:
+    what: The MX320 behind the hub exposes a class 07/01 printer interface and returns an IEEE 1284 Device ID to the ESP (FSD A1, R2)
+    available: unproven
+  printer-port-status:
+    what: The MX320's 1284 port-status bits change with paper out / error (FSD R3, OD-3)
+    available: unproven
+  usb-printer-sink:
+    what: A USB printer-class device that records every bulk-OUT byte, can pause (NAK) on command, and returns a set Device ID and port status (FSD §25.0, OD-4)
+    available: no
+    consequence: >-
+      Does not exist yet. Byte-exact and stall contracts (FR-6.1/6.2/6.5/6.8, NFR-6.1,
+      FR-8.5-8.7, NFR-17.2) can run only against the real MX320, without byte
+      comparison, until it is built.
+  printer-detach:
+    what: Detach and re-attach the printer's USB on demand while the DUT runs (operator prompt, or a switchable hub port)
+    available: unproven
+  mx320-job-file:
+    what: A rendered one-page MX320 print job (driver print-to-file), committed under tests/data/, that prints a known page
+    available: unproven
+  lan-clients:
+    what: A Mac with an MX320 driver (Gutenprint) and a Windows PC with the Canon MX320 driver, on the home LAN (FSD D2, D3, R4)
+    available: unproven
+  home-wlan:
+    what: Home WLAN credentials in the devcontainer environment (HOME_WIFI_SSID, HOME_WIFI_PASS — host env, never committed); the devcontainer and DUT share an L2 segment for mDNS (FSD A2)
+    available: unproven
+  ha-broker:
+    what: The Home Assistant MQTT broker, reachable from the home WLAN and from the devcontainer (MQTT_HOST/USER/PASS in host env)
+    available: unproven
+  operator:
+    what: A person at the bench answers portal prompts (page printed, paper removed, printer unplugged)
+    available: unproven
+  release-verification:
+    what: Tag-triggered journey run against the released artifact (.github/workflows/build.yml verify job on the devcontainer runner)
+    available: yes   # the container runs 24/7; the bench may not — an absent bench at verify time is an unmet precondition (not done)
+    note: runner installed in .devcontainer/; registration awaits the owner (.devcontainer/runner/register.sh)
+
+tests:
+  # The journey — the standard run (harness question 2, home-LAN variant).
+  # One test per step; workflow shape; the gate every hardware session runs behind.
+  - id: JRN-01.1
+    name: Flash the release image, boot unprovisioned
+    shape: workflow
+    kind: standard
+    wave: 1
+    phase: 1
+    tier: bench
+    verifies: [NFR-2.4, FR-20.1, FR-2.10]
+    needs: [bench-flash, bench-serial-reset, bench-serial-monitor, dut-on-slot]
+    observable: flash (with erase) ok at flash_args offsets; after reset UART shows `boot: fw=<expected version>` then `state: PROVISIONING`
+    impl: null
+    status: not done
+    reason: test not written
+  - id: JRN-01.2
+    name: Provision through the captive portal
+    shape: workflow
+    kind: standard
+    wave: 1
+    phase: 4
+    tier: bench
+    verifies: [FR-12.1, FR-12.2, FR-12.3, FR-2.18]
+    needs: [bench-wifi-sta, home-wlan]
+    observable: bench joins `MX320-Setup-<id>`, setup page served, home-WLAN credentials + admin password submitted and accepted; SoftAP gone within 5 s of the test-join
+    impl: null
+    status: not done
+    reason: test not written
+  - id: JRN-01.3
+    name: DUT operational on the home WLAN
+    shape: workflow
+    kind: standard
+    wave: 1
+    phase: 1
+    tier: bench
+    verifies: [FR-2.11, FR-2.12, FR-11.2]
+    needs: [bench-serial-monitor, home-wlan]
+    observable: UART `wifi: got ip <ip>`; GET http://<ip>/api/status from the devcontainer returns `state: OPERATIONAL`
+    impl: null
+    status: not done
+    reason: test not written
+  - id: JRN-01.4
+    name: Printer claimed
+    shape: workflow
+    kind: standard
+    wave: 1
+    phase: 2
+    tier: bench
+    verifies: [FR-8.1, FR-8.2]
+    needs: [usb-host-hub-power, printer-mx320]
+    observable: /api/status `printer.present: true`, `mdl` = the MX320's 1284 MDL (expected "MX320 series"), `status: ready`
+    impl: null
+    status: not done
+    reason: test not written
+  - id: JRN-01.5
+    name: Printer discoverable via mDNS
+    shape: workflow
+    kind: standard
+    wave: 1
+    phase: 3
+    tier: bench
+    verifies: [FR-10.1, FR-10.2]
+    needs: [home-wlan]
+    observable: from the devcontainer, `_pdl-datastream._tcp` browse finds the instance on port 9100 with TXT usb_MDL = the claimed MDL; `<hostname>.local` resolves to the DUT IP
+    impl: null
+    status: not done
+    reason: test not written
+  - id: JRN-01.6
+    name: Print one page
+    shape: workflow
+    kind: standard
+    wave: 1
+    phase: 3
+    tier: bench
+    verifies: [FR-9.1, FR-6.1, FR-6.4, FR-6.9]
+    needs: [mx320-job-file, operator, bench-operator-prompt]
+    observable: job file sent to <ip>:9100 and closed; log `job: done bytes=<file size>`; /api/status jobs.completed +1; operator confirms the known page printed
+    impl: null
+    status: not done
+    reason: test not written
+  - id: JRN-01.7
+    name: Status reaches Home Assistant's broker
+    shape: workflow
+    kind: standard
+    wave: 1
+    phase: 4
+    tier: bench
+    verifies: [FR-13.1, FR-13.3]
+    needs: [ha-broker]
+    observable: retained `mx320/<id>/availability` = online and `mx320/<id>/state` with jobs.completed equal to the value after JRN-01.6
+    impl: null
+    status: not done
+    reason: test not written
+
+gates:
+  load-defined:       {verdict: null, date: null, commit: null}
+  ai-harnessed:       {verdict: null, date: null, commit: null}
+  dut-ready:          {verdict: null, date: null, commit: null}
+  ready-for-shipment: {verdict: null, date: null, commit: null}
+  shipped:            {verdict: null, date: null, commit: null}

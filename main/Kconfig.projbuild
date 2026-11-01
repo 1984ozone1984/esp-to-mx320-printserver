@@ -1,0 +1,18 @@
+menu "MX320 print server"
+
+config PRINTSERVER_TEST_BUILD
+    bool "Test build (bench-only features)"
+    default n
+    help
+        Enables bench-only features: compile-time WiFi credentials and the
+        watchdog fault-injection endpoint (FSD FR-12.7, NFR-17.1). Never set
+        in a release image.
+
+config PRINTSERVER_UDP_LOG_HOST
+    string "UDP log destination (IPv4 dotted quad, empty = off)"
+    default ""
+    help
+        FSD §19 udp_log_host. Empty in release builds; the testbench in test
+        builds. A dotted quad: ESP-IDF 6 cannot resolve .local names here.
+
+endmenu

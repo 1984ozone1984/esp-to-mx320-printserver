@@ -1,0 +1,21 @@
+name: host tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build host tests
+        run: cmake -S tests/host -B build-host && cmake --build build-host
+      - name: Run host tests
+        run: ctest --test-dir build-host --output-on-failure --no-tests=error --output-junit host-junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: host-junit
+          path: build-host/host-junit.xml

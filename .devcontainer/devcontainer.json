@@ -1,0 +1,15 @@
+{
+    "name": "mx320-printserver",
+    "build": { "dockerfile": "Dockerfile", "context": ".." },
+    "remoteUser": "dev",
+    "containerEnv": {
+        "TESTBENCH_URL": "http://192.168.8.70:8080",
+        "GH_RUNNER_PAT": "${localEnv:GH_RUNNER_PAT}"
+    },
+    "postStartCommand": "bash .devcontainer/runner/start.sh",
+    "customizations": {
+        "vscode": {
+            "extensions": ["espressif.esp-idf-extension", "ms-python.python"]
+        }
+    }
+}
