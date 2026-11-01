@@ -210,12 +210,14 @@ verification:
     - Log marker `reset: factory` then a reboot.
     - After reboot the setup SoftAP `MX320-Setup-<id>` is visible within 10 s.
     - GET http://192.168.4.1/api/status shows `configured: false` and `state: PROVISIONING`.
+    - `boot_count` equals its value before the reset plus 1 (retained per §19).
     - For the three provisioned source states: after re-provisioning with WiFi credentials and a new admin password different from the old one (no MQTT fields), `config.mqtt_host` and `config.mqtt_user` are empty, `config.mqtt_port` = 1883, `config.hostname` = `mx320-<id>`, and `POST /api/ota` with the old admin password answers 401.
   timing: reboot ≤ 3 s after the 10 s threshold
   tolerance: ±0.5 s on the 10 s threshold
   prohibited_outcomes:
     - DUT rejoins the home WLAN after reboot.
     - Old admin password or MQTT settings still in effect after re-provisioning.
+    - `boot_count` restarted (erased with the user configuration).
     - The OTA slots or running firmware version change.
     - Reset fires on a hold of 9 s (see FR-2.19).
   tier: bench
@@ -760,7 +762,7 @@ via FR-2.17, FR-11.3–FR-11.6, FR-12.3.
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| NFR-16.1 | Provisioned DUT · OTA to new version, then power-cycle (§2.2) | Rejoins WLAN; `config.hostname`, `config.mqtt_host`, `config.mqtt_port`, `config.mqtt_user` unchanged in `/api/status` | SoftAP started; a setting at default | bench |
+| NFR-16.1 | Provisioned DUT on the home WLAN with the HA broker configured · OTA to new version, then power-cycle (§2.2) | Rejoins WLAN; `config.hostname`, `config.mqtt_host`, `config.mqtt_port`, `config.mqtt_user` unchanged in `/api/status`; GET /settings with the stored admin password returns 200; `mqtt.connected: true` ≤ 30 s (broker requires the stored MQTT password) | SoftAP started; a setting at default; admin or MQTT password lost | bench |
 
 ## 17. RTOS and Task Watchdog
 
@@ -1070,7 +1072,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.15
+fsd_version: 0.1.16
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1096,6 +1098,7 @@ change_history:
   - 0.1.13 2026-11-01 Load-defined round 11 (minor only): bench power-off defined (§2.2); HA-broker contracts run on the home WLAN
   - 0.1.14 2026-11-01 Load-defined round 12 (minor only): hostname ending in `-` tested; lockout 429 observed on every admin endpoint
   - 0.1.15 2026-11-01 Load-defined round 13 (minor only): FR-2.14 and FR-10.3 timed from their defining markers; FR-11.6(c) differs from a valid image only in size
+  - 0.1.16 2026-11-01 Load-defined round 14 (minor only): factory reset keeps boot_count; NFR-16.1 checks both stored passwords survive
 superseded_requirements: []
 open_decisions:
   - id: OD-3
