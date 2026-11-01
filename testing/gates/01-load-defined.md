@@ -47,4 +47,6 @@ comm -23 <(grep -oE '\*\*N?FR-[0-9]+\.[0-9]+\*\*' $F | tr -d '*' | sort -u) \
 - One requirement covering several tasks, endpoints or verbs (GET *and* POST) needs a stimulus for each, or a split.
 - A requirement naming several rejection conditions or triggers ("bad magic, wrong chip, > 3 MB"; "state, printing or counters") needs a stimulus for each named one — not a substitute ("truncated").
 - A precondition such as "credentials stored" must be reachable with the scope of the phase whose exit lists the requirement.
+- A test-only shortcut (seeded credentials, a debug hook) must not make another contract's precondition unreachable — e.g. seeding credentials makes PROVISIONING unreachable on a test build.
+- Every defined marker or enum value must have something that produces it (the §20 marker table names the stimulus); a value no event can produce is dead specification.
 - A deadline expressed through another parameter ("after keepalive expiry") is only falsifiable if that parameter has a stated value.

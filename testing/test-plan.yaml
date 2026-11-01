@@ -43,6 +43,9 @@ capabilities:
     limitation: >-
       Embedded-AI-Harness#57 — the first boot after /api/flash is not recorded.
       Consequence: tests reset once after flashing before reading the boot marker.
+  bench-serial-write:
+    what: Write a line to the DUT console (POST /api/serial/write) — the test build's `cred` command (FSD FR-19.1)
+    available: yes
   bench-serial-reset:
     what: Hard-reset the DUT through POST /api/serial/reset (DTR/RTS or EN GPIO)
     available: yes
@@ -111,7 +114,7 @@ capabilities:
     what: The MX320's 1284 port-status bits change with paper out / error (FSD R3, OD-3)
     available: unproven
   usb-printer-sink:
-    what: A USB printer-class device that records every bulk-OUT byte, can pause (NAK) on command, and returns a set Device ID and port status (FSD §25.0, OD-4)
+    what: A USB printer-class device that records every bulk-OUT byte, can pause (NAK) on command, and returns a set Device ID (incl. zero-length or STALL) and port status (FSD §25.0, OD-4)
     available: no
     consequence: >-
       Does not exist yet. Byte-exact and stall contracts (FR-6.1/6.2/6.5/6.8, NFR-6.1,
@@ -240,7 +243,7 @@ tests:
     reason: test not written
 
 gates:
-  load-defined:       {verdict: SHUT, date: 2026-11-01, commit: 2c402c8}   # fresh checker round 3 (rounds 1, 2 SHUT at f09df56-era, cdb85f1)
+  load-defined:       {verdict: SHUT, date: 2026-11-01, commit: 3353142}   # fresh checker round 4; rounds 1-3 SHUT
   ai-harnessed:       {verdict: SHUT, date: 2026-11-01, commit: 6587fb1}   # fresh checker round 2: load-defined verdict unrecorded; round 1 SHUT at cdb85f1 (release-verification declared yes)
   dut-ready:          {verdict: null, date: null, commit: null}
   ready-for-shipment: {verdict: null, date: null, commit: null}

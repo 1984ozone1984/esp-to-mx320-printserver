@@ -4,9 +4,9 @@ config PRINTSERVER_TEST_BUILD
     bool "Test build (bench-only features)"
     default n
     help
-        Enables bench-only features: compile-time WiFi credentials and the
-        watchdog fault-injection endpoint (FSD FR-12.7, NFR-17.1). Never set
-        in a release image.
+        Enables bench-only features: the UART `cred` command that stores WiFi
+        credentials in NVS, and the watchdog fault-injection endpoint (FSD
+        FR-19.1, NFR-17.1). Never set in a release image.
 
 config PRINTSERVER_UDP_LOG_HOST
     string "UDP log destination (IPv4 dotted quad, empty = off)"
