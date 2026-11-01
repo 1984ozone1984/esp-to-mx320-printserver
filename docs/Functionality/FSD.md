@@ -228,7 +228,7 @@ verification:
 | FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | `wifi: retry in <n> s` lines show n = 1, 2, 4 … capped at 60 | Reboot; SoftAP | bench |
 | FR-2.18 | PROVISIONING · submit valid form for the bench AP | `state: CONNECTING` ≤ 5 s after `portal: test-join ok`; SoftAP absent from a bench scan taken right after | Credentials persisted before test-join succeeded | bench |
 | FR-2.20 | Feed `IP_LOST` to the lifecycle function in OPERATIONAL with a job active (the bench cannot revoke a DHCP lease) | Next state WIFI_RECOVERY; action abort job | Any other next state | host |
-| FR-2.19 | In each of PROVISIONING, CONNECTING, OPERATIONAL, WIFI_RECOVERY · hold BOOT 9 s | No state change; config unchanged; no reboot | `reset: factory` logged | bench |
+| FR-2.19 | In each of PROVISIONING (NVS erased), CONNECTING (credentials stored, bench AP stopped), OPERATIONAL, WIFI_RECOVERY (bench AP disabled after OPERATIONAL) · hold BOOT 9 s | No state change; config unchanged; no reboot | `reset: factory` logged | bench |
 
 ### 2.4 Component Layering
 
@@ -653,7 +653,7 @@ verification:
 |---|---|---|---|---|
 | FR-12.1 | PROVISIONING · join SoftAP, GET each OS probe: http://captive.apple.com/hotspot-detect.html (macOS, iOS), http://www.msftconnecttest.com/connecttest.txt (Windows), http://connectivitycheck.gstatic.com/generate_204 (Android), http://example.com/ | Each returns the setup page or a 302 to it | A probe getting its "online" answer (`Success`, `Microsoft Connect Test`, 204); DNS failure | bench |
 | FR-12.2 | Bench AP up · GET setup page | Scan list includes the bench AP SSID | Empty list while the bench AP is up | bench |
-| FR-12.8 | Submit all fields (manual SSID = bench AP, hostname `mx320-test`, MQTT host/port/user/password) | After provisioning, `/api/status` `config.hostname`/`mqtt_host`/`mqtt_port`/`mqtt_user` equal the submitted values; GET /settings with the submitted admin password returns 200 | A submitted field silently dropped | bench |
+| FR-12.8 | Submit all fields (manual SSID = bench AP, hostname `mx320-test`, MQTT host/port/user/password) | After provisioning, `/api/status` `config.hostname`/`mqtt_host`/`mqtt_port`/`mqtt_user` equal the submitted values; GET /settings with the submitted admin password returns 200; with the broker requiring that MQTT user/password (HA broker), `mqtt.connected: true` ≤ 30 s | A submitted field silently dropped; `mqtt.connected: false` with the right password | bench |
 | FR-12.3 | Submit bench SSID with wrong password | Error shown ≤ 20 s; still PROVISIONING; NVS has no creds after reboot | Credentials persisted | bench |
 | FR-12.4 | Submit, one invalid field at a time: SSID empty / 33 bytes; WiFi password 7 / 64 chars; admin password 7 / 65 chars; hostname `bad host!` / 33 chars / `-x`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars | Each rejected with an error naming its field; nothing persisted | Any of them accepted or persisted | host (validator) + bench |
 | FR-12.5 | OPERATIONAL · scan from bench | No `MX320-Setup-*` SSID | SoftAP visible | bench |
@@ -842,7 +842,7 @@ verification:
 |---|---|---|---|---|
 | FR-19.1 | Test build, NVS erased, PROVISIONING · write `cred <bench SSID> <pass>` via `/api/serial/write`, reset | `cred: stored`; after reset `state: CONNECTING` then `wifi: got ip` | `state: PROVISIONING` after the reset | bench |
 | FR-19.2 | Release build, NVS erased · write the same line, reset | No `cred: stored`; after reset `state: PROVISIONING` | Any NVS change; `state: CONNECTING` | bench |
-| FR-19.3 | Test build · write `admin testpass1`; then `POST /api/ota` of a valid image with `admin:testpass1` | `admin: stored`; OTA answers 200 | OTA 401 with the stored password | bench |
+| FR-19.3 | Test build, credentials stored via `cred` (FR-19.1), OPERATIONAL · write `admin testpass1`; then `POST /api/ota` of a valid image with `admin:testpass1` | `admin: stored`; OTA answers 200 | OTA 401 with the stored password | bench |
 | FR-19.4 | Release build on the network: on a test build store credentials (`cred`) and admin password `oldpass12` (`admin`), then OTA to the release image (NVS survives OTA) · write `admin testpass1`; then `POST /api/ota` with `admin:testpass1` | No `admin: stored`; OTA answers 401; inactive slot unchanged | OTA accepted with that password | bench |
 
 Each validation rule owes a negative test (FR-11.8, FR-12.4); each persistence
@@ -916,14 +916,15 @@ Derived requirements:
 - **NFR-22.2** [Must] `[derived]`: No HTTP response, MQTT message or log line
   shall contain the WiFi, admin or MQTT password.
 - **NFR-22.3** [Should] `[derived]`: After 5 consecutive failed admin
-  authentications the device shall reject authentication attempts for 60 s
-  (returning 429).
+  authentications, counted together across all admin-authenticated endpoints
+  (`POST /api/ota`, `GET`/`POST /settings`), the device shall reject
+  authentication attempts on all of them for 60 s (returning 429).
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | NFR-22.1 | See FR-11.4 / FR-11.7 | — | — | bench |
 | NFR-22.2 | Set known passwords; capture all of /, /api/status, /settings, MQTT, UART, UDP | No capture contains any password | Any occurrence | bench |
-| NFR-22.3 | 5 wrong auths, then a correct one | 6th attempt gets 429; correct auth succeeds after 60 s | Correct auth accepted within lockout | bench |
+| NFR-22.3 | 3 wrong auths on `POST /api/ota` and 2 on `GET /settings`; then a correct auth on `POST /settings`; wait 60 s; correct auth on each endpoint | Correct `POST /settings` within the lockout gets 429; after 60 s every endpoint accepts the correct auth | Correct auth accepted within lockout; counters kept per endpoint | bench |
 
 **Accepted risks** (no requirement written):
 - No TLS: the admin password travels in clear (HTTP Basic) on the LAN.
@@ -1060,7 +1061,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.9
+fsd_version: 0.1.10
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1080,6 +1081,7 @@ change_history:
   - 0.1.7 2026-11-01 Load-defined round 5: FR-7.2 split across Phase 2/3 exits; test-build UART admin password (FR-19.3) and hang hook in Phase 1 scope; NFR-17.6 release has no hang endpoint; remaining coverage refinements
   - 0.1.8 2026-11-01 Load-defined round 6: FR-19.3/19.4 observed via OTA auth; `wifi: connecting` marker anchors retry spacing; FR-12.1 exempts /api/status; `configured` and `reset_reason` defined; per-state FR-2.17 preconditions; NFR-2.x in phase exits
   - 0.1.9 2026-11-01 Load-defined round 7: release-build-on-network precondition (FR-19.4, NFR-17.6); phase-specific FR-2.12 precondition; FR-2.18 timed to `state: CONNECTING`; Phase 3 scope names job fields
+  - 0.1.10 2026-11-01 Load-defined round 8 (minor only): lockout shared across admin endpoints; mqtt_pass observed via mqtt.connected; FR-2.19 per-state means; FR-19.3 network precondition
 superseded_requirements: []
 open_decisions:
   - id: OD-3
