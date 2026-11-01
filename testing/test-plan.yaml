@@ -127,7 +127,7 @@ capabilities:
     what: A Mac with an MX320 driver (Gutenprint) and a Windows PC with the Canon MX320 driver, on the home LAN (FSD D2, D3, R4)
     available: unproven
   home-wlan:
-    what: Home WLAN credentials in the devcontainer environment (HOME_WIFI_SSID, HOME_WIFI_PASS — host env, never committed); the devcontainer and DUT share an L2 segment for mDNS (FSD A2)
+    what: Home WLAN per FSD A2 (2.4 GHz, WPA2-PSK, DHCP), credentials in the devcontainer env (HOME_WIFI_SSID, HOME_WIFI_PASS — host env, never committed), devcontainer, Mac, PC and DUT on one L2 segment for mDNS
     available: unproven
   ha-broker:
     what: The Home Assistant MQTT broker, reachable from the home WLAN and from the devcontainer (MQTT_HOST/USER/PASS in host env)
@@ -176,7 +176,7 @@ tests:
     wave: 1
     phase: 1
     tier: bench
-    verifies: [FR-2.11, FR-2.12, FR-11.2]
+    verifies: [FR-2.11, FR-2.12]
     needs: [bench-serial-monitor, home-wlan]
     observable: UART `wifi: got ip <ip>`; GET http://<ip>/api/status from the devcontainer returns `state: OPERATIONAL`
     impl: null
