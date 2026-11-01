@@ -81,6 +81,8 @@ go over OTA; logs also go to the testbench UDP log (§20).
 Platform constraints — each one a number the build reads (§23 binds them to
 build settings):
 
+Every NFR-2.x constraint below is **[Must]**.
+
 | ID | Constraint | Value | Source |
 |---|---|---|---|
 | NFR-2.1 | MCU | ESP32-S3 (Seeed XIAO ESP32-S3) | `[user]` |
@@ -195,17 +197,20 @@ verification:
 id: FR-2.17
 verification:
   preconditions:
-    - WiFi credentials, admin password and MQTT settings stored; DUT in the source state under test.
+    - For CONNECTING, OPERATIONAL and WIFI_RECOVERY: WiFi credentials, admin password and MQTT settings stored (portal or /settings), DUT in that state.
+    - For PROVISIONING: NVS erased (no credentials can exist in this state), DUT in PROVISIONING.
   stimulus:
     - Hold BOOT (GPIO0) low for 11 s, release — once from each source state: PROVISIONING, CONNECTING (bench AP stopped), OPERATIONAL, WIFI_RECOVERY (AP disabled after OPERATIONAL); re-provision between runs.
   expected_observations:
     - Log marker `reset: factory` then a reboot.
     - After reboot the setup SoftAP `MX320-Setup-<id>` is visible within 10 s.
-    - GET http://192.168.4.1/api/status shows `configured: false`.
+    - GET http://192.168.4.1/api/status shows `configured: false` and `state: PROVISIONING`.
+    - For the three provisioned source states: after re-provisioning with WiFi credentials only, `config.mqtt_host` is empty and `POST /api/ota` with the old admin password answers 401.
   timing: reboot ≤ 3 s after the 10 s threshold
   tolerance: ±0.5 s on the 10 s threshold
   prohibited_outcomes:
     - DUT rejoins the home WLAN after reboot.
+    - Old admin password or MQTT settings still in effect after re-provisioning.
     - The OTA slots or running firmware version change.
     - Reset fires on a hold of 9 s (see FR-2.19).
   tier: bench
@@ -218,7 +223,7 @@ verification:
 | FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.4.1/` returns 200 ≤ 10 s after reset | DUT joins any other network | bench |
 | FR-2.11 | Credentials stored (FR-19.1 or portal) · reset | Log `state: CONNECTING` ≤ 2 s after reset | SoftAP started | target |
 | FR-2.12 | Credentials stored, AP up, printer present, broker configured · reset | Each ≤ 5 s after `wifi: got ip`: `/api/status` 200; mDNS A answer; TCP :9100 accepts; retained `online` on the broker (Phase 1 exit: `/api/status` only) | A service answering before `wifi: got ip` | bench |
-| FR-2.13 | Credentials for the bench AP stored · reset with (a) the bench AP stopped, (b) the bench AP up with a different password | `wifi: retry in <n> s` lines with n and their spacing 1,2,4,…,60,60 s (±20 %) for 5 min | SoftAP started; reboot | bench |
+| FR-2.13 | Credentials for the bench AP stored · reset with (a) the bench AP stopped, (b) the bench AP up with a different password | For 5 min: successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | SoftAP started; reboot | bench |
 | FR-2.14 | Job in progress · AP disabled | UART `state: WIFI_RECOVERY` and `job: abort id=<n> reason=wifi` ≤ 2 s after AP disable | DUT reboots; job later reported DONE | bench |
 | FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | `wifi: retry in <n> s` lines show n = 1, 2, 4 … capped at 60 | Reboot; SoftAP | bench |
 | FR-2.18 | PROVISIONING · submit valid form for the bench AP | SoftAP gone and `wifi: got ip` ≤ 5 s after `portal: test-join ok` | Credentials persisted before test-join succeeded | bench |
@@ -262,7 +267,7 @@ Each phase is entered using only what earlier phases delivered.
   fault-injection endpoint `/api/test/hang` (NFR-17.x, absent from release
   builds by NFR-17.6).
 - **Deliverables:** firmware flashed via the UART adapter; OTA path proven.
-- **Exit:** FR-5.1, FR-19.1, FR-19.2, FR-19.3, NFR-17.6, FR-2.11, FR-2.12 (HTTP only), FR-2.13, FR-2.16, FR-2.20,
+- **Exit:** NFR-2.1–NFR-2.4, FR-5.1, FR-19.1–FR-19.4, NFR-17.6, FR-2.11, FR-2.12 (HTTP only), FR-2.13, FR-2.16, FR-2.20,
   FR-11.3, FR-11.4, FR-11.6, NFR-17.1, NFR-17.5,
   FR-18.1 (banner + `/api/status`), FR-20.1–FR-20.2 (Phase 1 rows of the §20 marker table), NFR-23.1 pass.
 - **Depends on:** commissioning of the UART adapter wiring and bench AP (Phase 2
@@ -272,7 +277,7 @@ Each phase is entered using only what earlier phases delivered.
 
 - **Scope:** USB host + hub support; printer-class client (§8); status
   derivation (§7); printer fields in `/api/status`.
-- **Exit:** FR-8.1–FR-8.4, FR-8.8, FR-8.9, FR-7.1, FR-7.2 (idle case a), NFR-2.7, NFR-17.3,
+- **Exit:** FR-8.1–FR-8.4, FR-8.8, FR-8.9, FR-7.1, FR-7.2 (idle case a), NFR-2.5, NFR-2.7, NFR-17.3,
   FR-20.1 (Phase 2 rows of the §20 marker table) pass;
   printer identity of the real MX320 visible in `/api/status`.
 - **Depends on:** Phase 1 (`/api/status`, OTA, logging); commissioning of the
@@ -623,9 +628,10 @@ verification:
 `PROVISIONING`. SoftAP SSID `MX320-Setup-<id>` (id per §18), open, IP
 192.168.4.1; DNS catch-all answers every name with 192.168.4.1.
 
-- **FR-12.1** [Must] `[user]`: In `PROVISIONING`, an HTTP GET to any host via
-  the SoftAP shall return the setup page or a redirect to it (captive-portal
-  detection on macOS, Windows, iOS, Android).
+- **FR-12.1** [Must] `[user]`: In `PROVISIONING`, an HTTP GET via the SoftAP to
+  any host and path other than `http://192.168.4.1/api/status` shall return the
+  setup page or a redirect to it (captive-portal detection on macOS, Windows,
+  iOS, Android).
 - **FR-12.2** [Must] `[user]`: The setup page shall list the SSIDs found by a
   WiFi scan.
 - **FR-12.8** [Must] `[user]`: The setup form shall accept a manually entered
@@ -828,13 +834,16 @@ verification:
   line and change nothing in NVS.
 - **FR-19.3** [Must] `[derived]`: A test build shall accept the UART0 console
   line `admin <password>` (8–64 chars), store it as `admin_pass`, and log
-  `admin: stored`; a release build shall ignore it (as FR-19.2).
+  `admin: stored`.
+- **FR-19.4** [Must] `[derived]`: A release build shall ignore the `admin`
+  console line and change nothing in NVS.
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | FR-19.1 | Test build, NVS erased, PROVISIONING · write `cred <bench SSID> <pass>` via `/api/serial/write`, reset | `cred: stored`; after reset `state: CONNECTING` then `wifi: got ip` | `state: PROVISIONING` after the reset | bench |
 | FR-19.2 | Release build, NVS erased · write the same line, reset | No `cred: stored`; after reset `state: PROVISIONING` | Any NVS change; `state: CONNECTING` | bench |
-| FR-19.3 | Test build · write `admin testpass1`; then GET /settings with `admin:testpass1`; release build · same line | Test build: `admin: stored`, GET 200. Release build: no `admin: stored`, GET with that password 401 | Release build accepting the password | bench |
+| FR-19.3 | Test build · write `admin testpass1`; then `POST /api/ota` of a valid image with `admin:testpass1` | `admin: stored`; OTA answers 200 | OTA 401 with the stored password | bench |
+| FR-19.4 | Release build, NVS erased · write `admin testpass1`; then `POST /api/ota` with `admin:testpass1` | No `admin: stored`; OTA answers 401; inactive slot unchanged | OTA accepted with that password | bench |
 
 Each validation rule owes a negative test (FR-11.8, FR-12.4); each persistence
 rule owes a persistence test (NFR-16.1, FR-2.17).
@@ -857,6 +866,7 @@ datagrams to `<udp_log_host>:5555` (testbench UDP log).
 | `state: WIFI_RECOVERY` | bench AP disabled while OPERATIONAL | 1 |
 | `wifi: got ip <ip>` | AP up, credentials stored, reset | 1 |
 | `wifi: lost` | bench AP disabled while OPERATIONAL | 1 |
+| `wifi: connecting` | each STA connect attempt starts | 1 |
 | `wifi: retry in <n> s` | bench AP stopped, credentials stored, reset | 1 |
 | `cred: stored` | test build, UART `cred <ssid> <password>` | 1 |
 | `admin: stored` | test build, UART `admin <password>` | 1 |
@@ -1038,7 +1048,11 @@ requirement IDs in these chapters and the entries in `testing/test-plan.yaml`.
 }
 ```
 
-Required keys: all shown. `printer.status` ∈ {`absent`, `unknown`, `ready`,
+Required keys: all shown. `configured` is true exactly when WiFi credentials
+are stored in NVS. `reset_reason` is the ESP-IDF `esp_reset_reason_t` name
+without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
+`TASK_WDT`, `WDT`, `DEEPSLEEP`, `BROWNOUT`, `SDIO`, `USB`, `JTAG`, `EFUSE`,
+`PWR_GLITCH`, `CPU_LOCKUP`, `UNKNOWN`). `printer.status` ∈ {`absent`, `unknown`, `ready`,
 `paper_out`, `error`, `offline`}. When `present` is false, `mfg`/`mdl`/`vid`/
 `pid` are `null`. `pid` value above is illustrative, not normative (A1).
 
@@ -1046,7 +1060,7 @@ Required keys: all shown. `printer.status` ∈ {`absent`, `unknown`, `ready`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.7
+fsd_version: 0.1.8
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1064,6 +1078,7 @@ change_history:
   - 0.1.5 2026-11-01 Load-defined round 3: test-build NVS seeding (FR-19.1), FR-12.2 split (FR-12.8), Appendix B `config` object, FR-2.14 action narrowed to job abort, contracts cover every trigger/rule/marker
   - 0.1.6 2026-11-01 Load-defined round 4: UART credential command (FR-19.1/19.2) replaces compile-time seeding; marker table with stimulus and phase; FR-2.20 IP-lost row; per-rule validation and per-state factory-reset stimuli
   - 0.1.7 2026-11-01 Load-defined round 5: FR-7.2 split across Phase 2/3 exits; test-build UART admin password (FR-19.3) and hang hook in Phase 1 scope; NFR-17.6 release has no hang endpoint; remaining coverage refinements
+  - 0.1.8 2026-11-01 Load-defined round 6: FR-19.3/19.4 observed via OTA auth; `wifi: connecting` marker anchors retry spacing; FR-12.1 exempts /api/status; `configured` and `reset_reason` defined; per-state FR-2.17 preconditions; NFR-2.x in phase exits
 superseded_requirements: []
 open_decisions:
   - id: OD-3

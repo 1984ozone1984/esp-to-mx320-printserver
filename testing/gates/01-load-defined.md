@@ -51,4 +51,6 @@ comm -23 <(grep -oE '\*\*N?FR-[0-9]+\.[0-9]+\*\*' $F | tr -d '*' | sort -u) \
 - Every defined marker or enum value must have something that produces it (the §20 marker table names the stimulus); a value no event can produce is dead specification.
 - A phase exit listing a requirement whose contract has several cases must say which cases that phase can run ("FR-7.2 (idle case a)").
 - Anything a phase's tests rely on — a test hook, a password, a credential path — must be in that phase's scope and defined in the FSD, not assumed.
+- A timing observation between two log lines must be anchored on markers that bracket exactly the interval the requirement defines (retry wait, not wait + attempt).
+- A precondition must be consistent with the state it names (e.g. "MQTT settings stored" cannot hold in PROVISIONING).
 - A deadline expressed through another parameter ("after keepalive expiry") is only falsifiable if that parameter has a stated value.
