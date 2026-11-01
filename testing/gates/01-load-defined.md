@@ -53,4 +53,5 @@ comm -23 <(grep -oE '\*\*N?FR-[0-9]+\.[0-9]+\*\*' $F | tr -d '*' | sort -u) \
 - Anything a phase's tests rely on — a test hook, a password, a credential path — must be in that phase's scope and defined in the FSD, not assumed.
 - A timing observation between two log lines must be anchored on markers that bracket exactly the interval the requirement defines (retry wait, not wait + attempt).
 - A precondition must be consistent with the state it names (e.g. "MQTT settings stored" cannot hold in PROVISIONING).
+- A release-build contract must say how the release build reaches the network in that phase (it refuses the UART commands; the portal is Phase 4).
 - A deadline expressed through another parameter ("after keepalive expiry") is only falsifiable if that parameter has a stated value.

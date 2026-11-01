@@ -205,7 +205,7 @@ verification:
     - Log marker `reset: factory` then a reboot.
     - After reboot the setup SoftAP `MX320-Setup-<id>` is visible within 10 s.
     - GET http://192.168.4.1/api/status shows `configured: false` and `state: PROVISIONING`.
-    - For the three provisioned source states: after re-provisioning with WiFi credentials only, `config.mqtt_host` is empty and `POST /api/ota` with the old admin password answers 401.
+    - For the three provisioned source states: after re-provisioning with WiFi credentials and a new admin password different from the old one (no MQTT fields), `config.mqtt_host` is empty and `POST /api/ota` with the old admin password answers 401.
   timing: reboot ≤ 3 s after the 10 s threshold
   tolerance: ±0.5 s on the 10 s threshold
   prohibited_outcomes:
@@ -222,11 +222,11 @@ verification:
 |---|---|---|---|---|
 | FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.4.1/` returns 200 ≤ 10 s after reset | DUT joins any other network | bench |
 | FR-2.11 | Credentials stored (FR-19.1 or portal) · reset | Log `state: CONNECTING` ≤ 2 s after reset | SoftAP started | target |
-| FR-2.12 | Credentials stored, AP up, printer present, broker configured · reset | Each ≤ 5 s after `wifi: got ip`: `/api/status` 200; mDNS A answer; TCP :9100 accepts; retained `online` on the broker (Phase 1 exit: `/api/status` only) | A service answering before `wifi: got ip` | bench |
+| FR-2.12 | Credentials stored, AP up; for the Phase 4 exit also printer present and broker configured · reset | Each ≤ 5 s after `wifi: got ip`: `/api/status` 200; mDNS A answer; TCP :9100 accepts; retained `online` on the broker (Phase 1 exit: `/api/status` only) | A service answering before `wifi: got ip` | bench |
 | FR-2.13 | Credentials for the bench AP stored · reset with (a) the bench AP stopped, (b) the bench AP up with a different password | For 5 min: successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | SoftAP started; reboot | bench |
 | FR-2.14 | Job in progress · AP disabled | UART `state: WIFI_RECOVERY` and `job: abort id=<n> reason=wifi` ≤ 2 s after AP disable | DUT reboots; job later reported DONE | bench |
 | FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | `wifi: retry in <n> s` lines show n = 1, 2, 4 … capped at 60 | Reboot; SoftAP | bench |
-| FR-2.18 | PROVISIONING · submit valid form for the bench AP | SoftAP gone and `wifi: got ip` ≤ 5 s after `portal: test-join ok` | Credentials persisted before test-join succeeded | bench |
+| FR-2.18 | PROVISIONING · submit valid form for the bench AP | `state: CONNECTING` ≤ 5 s after `portal: test-join ok`; SoftAP absent from a bench scan taken right after | Credentials persisted before test-join succeeded | bench |
 | FR-2.20 | Feed `IP_LOST` to the lifecycle function in OPERATIONAL with a job active (the bench cannot revoke a DHCP lease) | Next state WIFI_RECOVERY; action abort job | Any other next state | host |
 | FR-2.19 | In each of PROVISIONING, CONNECTING, OPERATIONAL, WIFI_RECOVERY · hold BOOT 9 s | No state change; config unchanged; no reboot | `reset: factory` logged | bench |
 
@@ -286,7 +286,7 @@ Each phase is entered using only what earlier phases delivered.
 ### 3.3 Phase 3 — Printing
 
 - **Scope:** RAW port (§9), job forwarder (§6), mDNS discovery (§10), HTML
-  status page (FR-11.1).
+  status page (FR-11.1), `printing` and `job.*` fields in `/api/status`.
 - **Exit:** FR-6.x (FR-6.9, FR-6.11, FR-6.12 via `/api/status`), NFR-6.1,
   FR-9.x, FR-10.x, FR-7.3, FR-8.5–FR-8.7, FR-2.15,
   FR-7.2 (mid-job case b), FR-11.1, FR-11.5, NFR-14.1, NFR-17.4, NFR-17.2, FR-2.14, FR-20.1 (Phase 3 rows of the §20 marker table)
@@ -794,7 +794,7 @@ verification:
 | NFR-17.3 | As NFR-17.1 contract, `task=usb` | reset ≤ 12 s; reset_reason TASK_WDT | DUT stays hung | bench |
 | NFR-17.4 | As NFR-17.1 contract, `task=forwarder` | reset ≤ 12 s; reset_reason TASK_WDT | DUT stays hung | bench |
 | NFR-17.5 | As NFR-17.1 contract, `task=http` | reset ≤ 12 s; reset_reason TASK_WDT | DUT stays hung | bench |
-| NFR-17.6 | Release build · GET `/api/test/hang?task=main`, wait 15 s | 404; `boot_count` unchanged | Any reset; any 2xx | bench |
+| NFR-17.6 | Release build on the network: on a test build store credentials (`cred`) and admin password `oldpass12` (`admin`), then OTA to the release image (NVS survives OTA) · GET `/api/test/hang?task=main`, wait 15 s | 404; `boot_count` unchanged | Any reset; any 2xx | bench |
 | NFR-17.2 | Sink paused 10 min during a job | No reset; job completes after resume | reset_reason TASK_WDT | bench |
 
 # Part D — Cross-cutting Concerns
@@ -843,7 +843,7 @@ verification:
 | FR-19.1 | Test build, NVS erased, PROVISIONING · write `cred <bench SSID> <pass>` via `/api/serial/write`, reset | `cred: stored`; after reset `state: CONNECTING` then `wifi: got ip` | `state: PROVISIONING` after the reset | bench |
 | FR-19.2 | Release build, NVS erased · write the same line, reset | No `cred: stored`; after reset `state: PROVISIONING` | Any NVS change; `state: CONNECTING` | bench |
 | FR-19.3 | Test build · write `admin testpass1`; then `POST /api/ota` of a valid image with `admin:testpass1` | `admin: stored`; OTA answers 200 | OTA 401 with the stored password | bench |
-| FR-19.4 | Release build, NVS erased · write `admin testpass1`; then `POST /api/ota` with `admin:testpass1` | No `admin: stored`; OTA answers 401; inactive slot unchanged | OTA accepted with that password | bench |
+| FR-19.4 | Release build on the network: on a test build store credentials (`cred`) and admin password `oldpass12` (`admin`), then OTA to the release image (NVS survives OTA) · write `admin testpass1`; then `POST /api/ota` with `admin:testpass1` | No `admin: stored`; OTA answers 401; inactive slot unchanged | OTA accepted with that password | bench |
 
 Each validation rule owes a negative test (FR-11.8, FR-12.4); each persistence
 rule owes a persistence test (NFR-16.1, FR-2.17).
@@ -1060,7 +1060,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.8
+fsd_version: 0.1.9
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1079,6 +1079,7 @@ change_history:
   - 0.1.6 2026-11-01 Load-defined round 4: UART credential command (FR-19.1/19.2) replaces compile-time seeding; marker table with stimulus and phase; FR-2.20 IP-lost row; per-rule validation and per-state factory-reset stimuli
   - 0.1.7 2026-11-01 Load-defined round 5: FR-7.2 split across Phase 2/3 exits; test-build UART admin password (FR-19.3) and hang hook in Phase 1 scope; NFR-17.6 release has no hang endpoint; remaining coverage refinements
   - 0.1.8 2026-11-01 Load-defined round 6: FR-19.3/19.4 observed via OTA auth; `wifi: connecting` marker anchors retry spacing; FR-12.1 exempts /api/status; `configured` and `reset_reason` defined; per-state FR-2.17 preconditions; NFR-2.x in phase exits
+  - 0.1.9 2026-11-01 Load-defined round 7: release-build-on-network precondition (FR-19.4, NFR-17.6); phase-specific FR-2.12 precondition; FR-2.18 timed to `state: CONNECTING`; Phase 3 scope names job fields
 superseded_requirements: []
 open_decisions:
   - id: OD-3
