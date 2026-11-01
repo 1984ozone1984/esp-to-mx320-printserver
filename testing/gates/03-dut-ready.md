@@ -12,7 +12,7 @@
 | 2 | DUT record matches the FSD's unit | `dut:` | slot, MAC, chip ESP32-S3, flash 8 MB, PSRAM 8 MB from a dated `/api/chip/info` observation (FSD NFR-2.1–2.3) |
 | 3 | Forward path proven | `dut-on-slot.observed` | A named CI run → artefact → flashed at its `flash_args` offsets → `Init complete` read on the UART |
 | 4 | Project-side capabilities resolved | `capabilities:` | No `unproven` left; each `no` states its consequence; `printer-port-status` outcome reflected in the FSD (OD-3 closed) |
-| 5 | Agenda empty of open items | `testing/debugging-agenda.md` | Every row has a dated *Closed* entry |
+| 5 | Agenda empty of open items (incl. #12 release verification) | `testing/debugging-agenda.md` | Every row has a dated *Closed* entry |
 | 6 | Assumptions A1–A3 and risks R1–R2 resolved in the FSD | FSD §4 | Each confirmed, or the FSD amended |
 
 ## Mechanical checks

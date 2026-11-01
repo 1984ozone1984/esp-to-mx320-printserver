@@ -137,8 +137,12 @@ capabilities:
     available: unproven
   release-verification:
     what: Tag-triggered journey run against the released artifact (.github/workflows/build.yml verify job on the devcontainer runner)
-    available: yes   # the container runs 24/7; the bench may not — an absent bench at verify time is an unmet precondition (not done)
-    note: runner installed in .devcontainer/; registration awaits the owner (.devcontainer/runner/register.sh)
+    available: unproven
+    note: >-
+      Runner installed in .devcontainer/ but not registered (an owner grant:
+      .devcontainer/runner/register.sh); repo variables TESTBENCH_URL and DUT_SLOT unset.
+      Once proven, an absent bench at verify time is an unmet precondition (not done),
+      not a loss of the capability.
 
 tests:
   # The journey — the standard run (harness question 2, home-LAN variant).
