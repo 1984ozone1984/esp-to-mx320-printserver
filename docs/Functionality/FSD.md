@@ -629,7 +629,7 @@ verification:
 | FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) an image of 3 145 729 bytes (0x300001) | 400; no reboot; version unchanged | Boot into partial image | bench |
 | FR-11.7 | GET /settings and POST /settings, each without auth | Both 401; `/api/status` `config.*` unchanged | Settings page served; any field persisted | bench |
 | FR-11.9 | DUT on the home WLAN (HA broker reachable), valid credentials · POST hostname `mx320-new`, MQTT host/port/user/password of the HA broker, admin_pass `newpass12`; then reset | 200; at once: `config.mqtt_*` show the new values, the old admin password gets 401 and `newpass12` 200; after the reset: `config.hostname` = `mx320-new`, `mx320-new.local` resolves, `mqtt.connected: true` ≤ 30 s after `wifi: got ip` | A submitted field not persisted; admin change waiting for a reboot | bench |
-| FR-11.8 | Valid credentials · POST one invalid field at a time together with one valid change to another field (MQTT port 1884; hostname `mx320-new` when the port is under test): hostname `bad host!` / 33 chars / `-x`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars; admin_pass 7 / 65 chars | Each 400 naming the field; the valid companion field still holds its old value in `config.*` | Partial persist; any invalid value accepted | host (validator) + bench |
+| FR-11.8 | Valid credentials · POST one invalid field at a time together with one valid change to another field (MQTT port 1884; hostname `mx320-new` when the port is under test): hostname `bad host!` / 33 chars / `-x` / `x-`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars; admin_pass 7 / 65 chars | Each 400 naming the field; the valid companion field still holds its old value in `config.*` | Partial persist; any invalid value accepted | host (validator) + bench |
 
 ## 12. Captive Portal
 
@@ -664,7 +664,7 @@ verification:
 | FR-12.2 | Bench AP up · GET setup page | Scan list includes the bench AP SSID | Empty list while the bench AP is up | bench |
 | FR-12.8 | Submit all fields (manual SSID = home WLAN, where the HA broker is reachable; hostname `mx320-test`, MQTT host/port/user/password) | After provisioning, `/api/status` `config.hostname`/`mqtt_host`/`mqtt_port`/`mqtt_user` equal the submitted values; GET /settings with the submitted admin password returns 200; with the broker requiring that MQTT user/password (HA broker), `mqtt.connected: true` ≤ 30 s | A submitted field silently dropped; `mqtt.connected: false` with the right password | bench |
 | FR-12.3 | Submit bench SSID with wrong password | Error shown ≤ 20 s; still PROVISIONING; NVS has no creds after reboot | Credentials persisted | bench |
-| FR-12.4 | Submit, one invalid field at a time: SSID empty / 33 bytes; WiFi password 7 / 64 chars; admin password 7 / 65 chars; hostname `bad host!` / 33 chars / `-x`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars | Each rejected with an error naming its field; nothing persisted | Any of them accepted or persisted | host (validator) + bench |
+| FR-12.4 | Submit, one invalid field at a time: SSID empty / 33 bytes; WiFi password 7 / 64 chars; admin password 7 / 65 chars; hostname `bad host!` / 33 chars / `-x` / `x-`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars | Each rejected with an error naming its field; nothing persisted | Any of them accepted or persisted | host (validator) + bench |
 | FR-12.5 | OPERATIONAL · scan from bench | No `MX320-Setup-*` SSID | SoftAP visible | bench |
 | FR-12.6 | Known WiFi and admin passwords · capture every portal response: the setup page before submit, the error response to an invalid submit, the response to a failed test-join, the success response, and the setup page fetched again after each | Password fields empty in every capture | Either password value in any capture | bench |
 | FR-12.7 | `strings` on release image | Bench SSID/password absent | Present | other (CI) |
@@ -933,7 +933,7 @@ Derived requirements:
 |---|---|---|---|---|
 | NFR-22.1 | See FR-11.4 / FR-11.7 | — | — | bench |
 | NFR-22.2 | Set known passwords; capture all of `GET /`, `/api/status`, `GET /settings`, the responses to `POST /settings` and `POST /api/ota` (success and failure), every portal response (as FR-12.6), MQTT, UART, UDP | No capture contains any password | Any occurrence | bench |
-| NFR-22.3 | Wrong auths #1–3 on `POST /api/ota`, #4–5 on `GET /settings`; then a correct auth on `POST /settings`; wait 60 s; correct auth on each endpoint | Attempts #1–5 each get 401; the correct `POST /settings` within the lockout gets 429; after 60 s every endpoint accepts the correct auth | Any of #1–5 answered 429 (threshold below 5); correct auth accepted within lockout; counters kept per endpoint | bench |
+| NFR-22.3 | Wrong auths #1–3 on `POST /api/ota`, #4–5 on `GET /settings`; then, within the lockout, a correct auth on each of `POST /settings`, `POST /api/ota`, `GET /settings`; wait 60 s; correct auth on each endpoint | Attempts #1–5 each get 401; each of the three correct calls within the lockout gets 429; after 60 s every endpoint accepts the correct auth | Any of #1–5 answered 429 (threshold below 5); correct auth accepted within lockout; counters kept per endpoint | bench |
 
 **Accepted risks** (no requirement written):
 - No TLS: the admin password travels in clear (HTTP Basic) on the LAN.
@@ -1070,7 +1070,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.13
+fsd_version: 0.1.14
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1094,6 +1094,7 @@ change_history:
   - 0.1.11 2026-11-01 Load-defined round 9 (minor only): FR-11.9 positive settings change; factory-reset defaults observed; FR-2.16 timing; FR-20.2 per phase; lockout threshold pinned; OD-4 gate list complete
   - 0.1.12 2026-11-01 Load-defined round 10 (minor only): online/discovery re-published after a broker restart observed; every portal and admin response captured for password echoes
   - 0.1.13 2026-11-01 Load-defined round 11 (minor only): bench power-off defined (§2.2); HA-broker contracts run on the home WLAN
+  - 0.1.14 2026-11-01 Load-defined round 12 (minor only): hostname ending in `-` tested; lockout 429 observed on every admin endpoint
 superseded_requirements: []
 open_decisions:
   - id: OD-3
