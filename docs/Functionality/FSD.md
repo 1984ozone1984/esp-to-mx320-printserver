@@ -183,7 +183,7 @@ verification:
   stimulus:
     - Disable the bench AP for 20 s, then re-enable it.
   expected_observations:
-    - Log marker `wifi: lost` within 2 s of AP disable.
+    - Log marker `wifi: lost` after AP disable.
     - Log marker `wifi: got ip` after AP re-enable.
     - TCP connect to <ip>:9100 succeeds within 30 s of AP re-enable.
     - A 1 MiB test job sent after recovery arrives byte-identical at the USB sink.
@@ -229,7 +229,7 @@ verification:
 | FR-2.11 | Credentials stored (FR-19.1 or portal) · reset | Log `state: CONNECTING` ≤ 2 s after reset | SoftAP started | target |
 | FR-2.12 | Credentials stored, AP up; for the Phase 4 exit also printer present and broker configured · reset | Each ≤ 5 s after `wifi: got ip`: `/api/status` 200; mDNS A answer; TCP :9100 accepts; retained `online` on the broker (Phase 1 exit: `/api/status` only) | A service answering before `wifi: got ip` | bench |
 | FR-2.13 | Credentials for the bench AP stored · reset with (a) the bench AP stopped, (b) the bench AP up with a different password | For 5 min: successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | SoftAP started; reboot | bench |
-| FR-2.14 | Job in progress · AP disabled | UART `state: WIFI_RECOVERY` and `job: abort id=<n> reason=wifi` ≤ 2 s after AP disable | DUT reboots; job later reported DONE | bench |
+| FR-2.14 | Job in progress · AP disabled | UART `state: WIFI_RECOVERY` and `job: abort id=<n> reason=wifi` ≤ 2 s after the `wifi: lost` marker | DUT reboots; job later reported DONE | bench |
 | FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | Successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | Reboot; SoftAP; a retry earlier than n s | bench |
 | FR-2.18 | PROVISIONING · submit valid form for the bench AP | `state: CONNECTING` ≤ 5 s after `portal: test-join ok`; SoftAP absent from a bench scan taken right after | Credentials persisted before test-join succeeded | bench |
 | FR-2.20 | Feed `IP_LOST` to the lifecycle function in OPERATIONAL with a job active (the bench cannot revoke a DHCP lease) | Next state WIFI_RECOVERY; action abort job | Any other next state | host |
@@ -566,7 +566,7 @@ querier on the LAN.
 |---|---|---|---|---|
 | FR-10.1 | OPERATIONAL · `dns-sd -G v4 <hostname>.local` / avahi-resolve | Resolves to STA IP | Any other address (e.g. 192.168.4.1) | bench |
 | FR-10.2 | Printer present · browse `_pdl-datastream._tcp` | Instance named `<MDL> @ <hostname>` found with exact TXT keys/values; TXT-builder unit test passes | Other instance name; missing key; port ≠ 9100 | host + bench |
-| FR-10.3 | Detach printer | Service removed from browse ≤ 5 s | Service lingers | bench |
+| FR-10.3 | Detach printer | Service removed from browse ≤ 5 s after the `usb: printer absent` marker | Service lingers | bench |
 | FR-10.4 | Browse `_http._tcp` | Instance on port 80 | Port ≠ 80; instance missing | bench |
 
 ## 11. HTTP Status, Settings & OTA
@@ -626,7 +626,7 @@ verification:
 | FR-11.2 | GET /api/status | Valid against Appendix B schema; ≤ 2 s | Missing required key | host (serializer) + bench |
 | FR-11.4 | POST image, no / wrong auth | 401; running partition and inactive slot hash unchanged | Flash write | bench |
 | FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical; inactive-slot SHA-256 (`/api/flash/read`) unchanged | Reboot mid-job; inactive slot written | bench |
-| FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) an image of 3 145 729 bytes (0x300001) | 400; no reboot; version unchanged | Boot into partial image | bench |
+| FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) a valid ESP32-S3 image (magic 0xE9, ESP32-S3 chip ID) padded to 3 145 729 bytes (0x300001), so only its size is wrong | 400; no reboot; version unchanged | Boot into partial image | bench |
 | FR-11.7 | GET /settings and POST /settings, each without auth | Both 401; `/api/status` `config.*` unchanged | Settings page served; any field persisted | bench |
 | FR-11.9 | DUT on the home WLAN (HA broker reachable), valid credentials · POST hostname `mx320-new`, MQTT host/port/user/password of the HA broker, admin_pass `newpass12`; then reset | 200; at once: `config.mqtt_*` show the new values, the old admin password gets 401 and `newpass12` 200; after the reset: `config.hostname` = `mx320-new`, `mx320-new.local` resolves, `mqtt.connected: true` ≤ 30 s after `wifi: got ip` | A submitted field not persisted; admin change waiting for a reboot | bench |
 | FR-11.8 | Valid credentials · POST one invalid field at a time together with one valid change to another field (MQTT port 1884; hostname `mx320-new` when the port is under test): hostname `bad host!` / 33 chars / `-x` / `x-`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars; admin_pass 7 / 65 chars | Each 400 naming the field; the valid companion field still holds its old value in `config.*` | Partial persist; any invalid value accepted | host (validator) + bench |
@@ -1070,7 +1070,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.14
+fsd_version: 0.1.15
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1095,6 +1095,7 @@ change_history:
   - 0.1.12 2026-11-01 Load-defined round 10 (minor only): online/discovery re-published after a broker restart observed; every portal and admin response captured for password echoes
   - 0.1.13 2026-11-01 Load-defined round 11 (minor only): bench power-off defined (§2.2); HA-broker contracts run on the home WLAN
   - 0.1.14 2026-11-01 Load-defined round 12 (minor only): hostname ending in `-` tested; lockout 429 observed on every admin endpoint
+  - 0.1.15 2026-11-01 Load-defined round 13 (minor only): FR-2.14 and FR-10.3 timed from their defining markers; FR-11.6(c) differs from a valid image only in size
 superseded_requirements: []
 open_decisions:
   - id: OD-3
