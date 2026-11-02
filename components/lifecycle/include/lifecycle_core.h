@@ -53,3 +53,6 @@ typedef struct {
 lc_result_t lc_decide(lc_state_t state, lc_event_t event, lc_guard_t guard);
 
 const char *lc_state_name(lc_state_t state);   /* "BOOT", "PROVISIONING", … */
+
+/* FR-2.13 / FR-2.16 retry wait for attempt n (0-based): 1, 2, 4, 8, 16, 32, 60, 60 … s */
+uint32_t lc_backoff_s(uint32_t attempt);

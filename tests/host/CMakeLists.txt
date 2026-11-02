@@ -11,5 +11,3 @@ add_executable(test_lifecycle test_lifecycle.c ../../components/lifecycle/lifecy
 target_include_directories(test_lifecycle PRIVATE ../../components/lifecycle/include)
 target_compile_options(test_lifecycle PRIVATE -Wall -Wextra -Werror)
 add_test(NAME TC-LIFE-01 COMMAND test_lifecycle)
-# Expected to fail until the core implements the §2.3 table (xfail).
-set_tests_properties(TC-LIFE-01 PROPERTIES WILL_FAIL TRUE)
