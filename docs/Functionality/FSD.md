@@ -73,10 +73,20 @@ GPIO19/20) is the **USB host**. It connects to the upstream port of an active
 (self-powered) USB hub; the MX320 connects to a downstream port of that hub.
 
 **Bench topology** `[user]`: identical product wiring, plus a USB-UART adapter
-on XIAO D6/D7 (UART0) with BOOT/EN control lines, plugged into the testbench Pi
-(192.168.8.70) — **not** into the product hub, whose host is the ESP32. The
-testbench flashes and reads the console through that adapter; routine updates
-go over OTA; logs also go to the testbench UDP log (§20).
+on XIAO D6/D7 (UART0, RX/TX/GND only) plugged into the testbench Pi
+(192.168.8.70) — **not** into the product hub, whose host is the ESP32. No
+BOOT or EN line is wired `[user]`, so the adapter carries the console only and
+cannot enter download mode. The testbench reads and writes the console through
+that adapter; every update goes over OTA (FR-11.3); logs also go to the
+testbench UDP log (§20).
+
+**Bench cold flash** — the only way to write the bootloader, partition table or
+an erased flash, used for the first flash, recovery from an image that cannot
+reach the network, and contracts whose precondition is a release build on
+erased NVS: an operator, prompted through `/api/human-interaction`, moves the
+XIAO's USB-C from the hub's upstream port to the Pi; the testbench flashes
+through that native-USB slot (with erase where the contract says so); the
+operator moves the cable back. The MX320 is absent from the ESP during it.
 
 Platform constraints — each one a number the build reads (§23 binds them to
 build settings):
@@ -98,7 +108,7 @@ Every NFR-2.x constraint below is **[Must]**.
 | NFR-2.1–2.3 | Chip read (§25.0) via the UART adapter; reset | Chip ESP32-S3, flash 8 MB; `boot:` marker with `flash=8 psram=8` | `psram=0` | bench (commissioning) |
 | NFR-2.4 | Reset DUT, read UART adapter | Boot banner at 115200 on GPIO43 | Banner only on USB-Serial/JTAG | bench |
 | NFR-2.5 | Attach printer to USB-C via hub | FR-8.1 passes | Console output on the USB-C port | bench |
-| NFR-2.6 | Running · hold BOOT (GPIO0) 11 s | `reset: factory` logged (FR-2.17) | `reset: factory` with BOOT untouched | bench |
+| NFR-2.6 | Running · operator holds BOOT (§25.0 button press) for about 12 s | `button: held <ms> ms` with ms ≥ 10000, then `reset: factory` (FR-2.17) | `reset: factory` without a preceding `button: held` line | bench |
 | NFR-2.7 | Printer behind two cascaded hubs | Printer not claimed; log `usb: hub depth exceeded` | Crash | bench |
 
 Power: the XIAO and the hub are supplied by the hub's 5 V supply; the ESP32
@@ -206,7 +216,7 @@ verification:
     - For CONNECTING, OPERATIONAL and WIFI_RECOVERY: WiFi credentials, admin password and MQTT settings stored (portal or /settings), DUT in that state.
     - For PROVISIONING: NVS erased (no credentials can exist in this state), DUT in PROVISIONING.
   stimulus:
-    - Hold BOOT (GPIO0) low for 11 s, release — once from each source state: PROVISIONING, CONNECTING (bench AP stopped), OPERATIONAL, WIFI_RECOVERY (AP disabled after OPERATIONAL); re-provision between runs.
+    - Operator holds BOOT for about 12 s (§25.0 button press; `button: held <ms> ms` must show ≥ 10000, else the run is repeated) — once from each source state: PROVISIONING, CONNECTING (bench AP stopped), OPERATIONAL, WIFI_RECOVERY (AP disabled after OPERATIONAL); re-provision between runs.
   expected_observations:
     - Log marker `reset: factory` then a reboot.
     - After reboot the setup SoftAP `MX320-Setup-<id>` is visible within 10 s.
@@ -220,7 +230,7 @@ verification:
     - Old admin password or MQTT settings still in effect after re-provisioning.
     - `boot_count` restarted (erased with the user configuration).
     - The OTA slots or running firmware version change.
-    - Reset fires on a hold of 9 s (see FR-2.19).
+    - Reset fires on a hold whose `button: held` line shows < 10000 ms (see FR-2.19).
   tier: bench
   evidence: [GPIO drive timestamps, UART log, SoftAP scan, /api/status]
   cleanup: [Re-provision DUT via portal (P-PROVISION)]
@@ -236,7 +246,7 @@ verification:
 | FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | Successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | Reboot; SoftAP; a retry earlier than n s | bench |
 | FR-2.18 | PROVISIONING · submit valid form for the bench AP | `state: CONNECTING` ≤ 5 s after `portal: test-join ok`; then, with the bench AP stopped (state is no longer PROVISIONING, so no SoftAP may return), the setup SSID absent from a bench scan | Credentials persisted before test-join succeeded | bench |
 | FR-2.20 | Feed `IP_LOST` to the lifecycle function in OPERATIONAL with a job active (the bench cannot revoke a DHCP lease) | Next state WIFI_RECOVERY; action abort job | Any other next state | host |
-| FR-2.19 | In each of PROVISIONING (NVS erased), CONNECTING (credentials stored, bench AP stopped), OPERATIONAL, WIFI_RECOVERY (bench AP disabled after OPERATIONAL) · hold BOOT 9 s | No state change; config unchanged; no reboot | `reset: factory` logged | bench |
+| FR-2.19 | In each of PROVISIONING (NVS erased), CONNECTING (credentials stored, bench AP stopped), OPERATIONAL, WIFI_RECOVERY (bench AP disabled after OPERATIONAL) · operator holds BOOT for about 7 s (§25.0 button press; `button: held` must show < 10000 ms, else repeat) | No state change; config unchanged; no reboot | `reset: factory` logged | bench |
 
 ### 2.4 Component Layering
 
@@ -273,13 +283,16 @@ Each phase is entered using only what earlier phases delivered.
   `heap_free`); OTA endpoint (§11) authenticated by an admin password stored
   through the test build's UART `admin` command (FR-19.3); test-build watchdog
   fault-injection endpoint `/api/test/hang` (NFR-17.x, absent from release
-  builds by NFR-17.6).
-- **Deliverables:** firmware flashed via the UART adapter; OTA path proven.
-- **Exit:** NFR-2.1–NFR-2.4, FR-5.1, FR-19.1–FR-19.4, NFR-17.6, FR-2.11, FR-2.12 (HTTP only), FR-2.13, FR-2.16, FR-2.20,
+  builds by NFR-17.6); test-build console commands `reboot` and `wipe`
+  (FR-19.5–FR-19.8).
+- **Deliverables:** first firmware written by bench cold flash (§2.2); OTA path
+  proven; every later Phase 1 image delivered by OTA.
+- **Exit:** NFR-2.1–NFR-2.4, FR-5.1, FR-19.1–FR-19.8, NFR-17.6, FR-2.11, FR-2.12 (HTTP only), FR-2.13, FR-2.16, FR-2.20,
   FR-11.3, FR-11.4, FR-11.6, NFR-17.1, NFR-17.5,
   FR-18.1 (banner + `/api/status`), FR-20.1–FR-20.2 (Phase 1 rows of the §20 marker table), NFR-23.1 pass.
 - **Depends on:** commissioning of the UART adapter wiring and bench AP (Phase 2
-  of the journey, `/commission`).
+  of the journey, `/commission`). Until OTA is proven, the XIAO's USB-C stays on
+  the Pi so each image can be cold-flashed.
 
 ### 3.2 Phase 2 — USB printer link
 
@@ -849,6 +862,17 @@ verification:
   `admin: stored`.
 - **FR-19.4** [Must] `[derived]`: A release build shall ignore the `admin`
   console line and change nothing in NVS.
+- **FR-19.5** [Must] `[derived]`: A test build shall accept the UART0 console
+  line `reboot`, log `reboot: requested` and restart (reset reason `SW`) — the
+  bench's reset, since no EN line is wired (§2.2).
+- **FR-19.6** [Must] `[derived]`: A test build shall accept the UART0 console
+  line `wipe`, erase the whole `nvs` partition (including `boot_count`), log
+  `wipe: done` and restart — the bench's "NVS erased" precondition on a test
+  build.
+- **FR-19.7** [Must] `[derived]`: A release build shall ignore the `reboot`
+  console line.
+- **FR-19.8** [Must] `[derived]`: A release build shall ignore the `wipe`
+  console line and change nothing in NVS.
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
@@ -856,6 +880,10 @@ verification:
 | FR-19.2 | Release build, NVS erased · write the same line, reset | No `cred: stored`; after reset `state: PROVISIONING` | Any NVS change other than the `boot_count` increment of the reset; `state: CONNECTING` | bench |
 | FR-19.3 | Test build, credentials stored via `cred` (FR-19.1), OPERATIONAL · write `admin testpass1`; then `POST /api/ota` of a valid image with `admin:testpass1` | `admin: stored`; OTA answers 200 | OTA 401 with the stored password | bench |
 | FR-19.4 | Release build on the network: on a test build store credentials (`cred`) and admin password `oldpass12` (`admin`), then OTA to the release image (NVS survives OTA) · write `admin testpass1`; then `POST /api/ota` with `admin:testpass1` | No `admin: stored`; OTA answers 401; inactive-slot SHA-256 (slot read, §25.0) unchanged | OTA accepted with that password | bench |
+| FR-19.5 | Test build, OPERATIONAL, `boot_count` = n · write `reboot` | `reboot: requested`, then within 5 s `boot: … reset=SW count=<n+1>` | No restart within 5 s; a reset reason other than `SW` | bench |
+| FR-19.6 | Test build with credentials stored, OPERATIONAL · write `wipe` | `wipe: done`, then within 5 s `boot: … count=1` and `state: PROVISIONING` | `state: CONNECTING` after the restart; `count` > 1 | bench |
+| FR-19.7 | Release build on the network (as FR-19.4), `boot_count` = n · write `reboot`, wait 10 s | No `reboot: requested`; no `boot:` line; `/api/status` `boot_count` still n | Any restart within the 10 s | bench |
+| FR-19.8 | Release build on the network (as FR-19.4) · write `wipe`, wait 10 s, then operator power-cycle (§2.2) | No `wipe: done`; after the power-cycle `state: CONNECTING` and `boot_count` = previous + 1 | `state: PROVISIONING`; `boot_count` = 1 | bench |
 
 Each validation rule owes a negative test (FR-11.8, FR-12.4); each persistence
 rule owes a persistence test (NFR-16.1, FR-2.17).
@@ -882,6 +910,8 @@ datagrams to `<udp_log_host>:5555` (testbench UDP log).
 | `wifi: retry in <n> s` | bench AP stopped, credentials stored, reset | 1 |
 | `cred: stored` | test build, UART `cred <ssid> <password>` | 1 |
 | `admin: stored` | test build, UART `admin <password>` | 1 |
+| `reboot: requested` | test build, UART `reboot` | 1 |
+| `wipe: done` | test build, UART `wipe` | 1 |
 | `usb: printer claimed vid=<hex> pid=<hex> mdl=<MDL>` | printer attached | 2 |
 | `usb: printer absent` | printer detached | 2 |
 | `usb: hub depth exceeded` | printer behind two cascaded hubs | 2 |
@@ -891,6 +921,7 @@ datagrams to `<udp_log_host>:5555` (testbench UDP log).
 | `job: abort id=<n> reason=usb` | printer detached mid-job | 3 |
 | `job: abort id=<n> reason=client` | client resets the connection mid-job | 3 |
 | `job: abort id=<n> reason=wifi` | bench AP disabled mid-job | 3 |
+| `button: held <ms> ms` | in any state but `BOOT`: BOOT released (ms = press length), or BOOT still held at 10 000 ms (logged then, ms = 10000, before `reset: factory`) | 4 |
 | `state: FACTORY_RESET`, `reset: factory` | BOOT held 11 s | 4 |
 | `portal: test-join ok` | valid portal submission, test-join succeeds | 4 |
 - **FR-20.2** [Should] `[derived]`: When `udp_log_host` is set and the device is
@@ -1008,6 +1039,19 @@ partition at its offset and size, compared by the returned SHA-256 (taken
 before and after the stimulus); **chip read** — `POST /api/chip/info`,
 reporting chip, flash size and MAC.
 
+**Bench reset.** "Reset" in a contract means: on a test build, the console
+line `reboot` (FR-19.5) written through `/api/serial/write`; on a release
+build, an operator power-cycle (§2.2). No EN line is wired.
+
+**NVS erased.** On a test build, the console line `wipe` (FR-19.6); on a
+release build, a bench cold flash with erase (§2.2).
+
+**Button press.** No bench line drives BOOT. An operator, prompted through
+`/api/human-interaction`, presses the XIAO's BOOT button for the stated
+duration; the observation is the DUT's own `button: held <ms> ms` marker, never
+the operator's timing. A run whose marker falls on the wrong side of 10 000 ms
+for the contract is repeated, not judged.
+
 **Portal client.** Contracts that use the setup portal (§12, FR-2.10,
 FR-2.18) reach it through the bench station (`/api/wifi/sta_join` to the setup
 SSID, then `/api/wifi/http`); where a contract also needs the bench AP up, the
@@ -1093,7 +1137,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.18
+fsd_version: 0.1.19
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1122,6 +1166,7 @@ change_history:
   - 0.1.16 2026-11-01 Load-defined round 14 (minor only): factory reset keeps boot_count; NFR-16.1 checks both stored passwords survive
   - 0.1.17 2026-11-02 Load-defined round 15 (minor only): FR-19.2 exempts boot_count; NFR-14.1 prohibition matches 19-of-20; FR-2.10 follows redirects; slot read and chip read defined (§25.0); OD-4 consequence names the sink-only contracts
   - 0.1.18 2026-11-02 Load-defined round 16 (OPEN; minor fixes): OD-4 gate list and Phase 4 consequence; attach/detach instant and portal client defined (§25.0); FR-2.19 single obligation; FR-2.17 forbids any rejoin; FR-2.18 scan with bench AP stopped
+  - 0.1.19 2026-11-02 Change request (user): no BOOT/EN wiring. Bench topology without control lines; bench cold flash defined (§2.2); updates by OTA; test-build `reboot`/`wipe` (FR-19.5–19.8); BOOT presses by operator observed through `button: held`; §25.0 defines bench reset, NVS erased, button press
 superseded_requirements: []
 open_decisions:
   - id: OD-3

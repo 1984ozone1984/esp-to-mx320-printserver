@@ -21,7 +21,7 @@ dut:
     2026-11-02 /api/chip/info: ESP32-S3 (QFN56) rev v0.2, flash 8MB (GD c8/4017,
     quad eFuse, run as DIO), embedded PSRAM 8MB (octal_psram: 64 Mbit, gen 3),
     40 MHz crystal. Matches FSD NFR-2.1-2.3.
-  temporary_flash_slot: SLOT4  # XIAO USB-C still on the Pi (303a:1001) until dut-boot-en is proven; then it moves to the hub
+  cold_flash_slot: SLOT4  # XIAO native USB (303a:1001) while its USB-C is on the Pi: bench cold flash only (FSD §2.2); OTA otherwise
 testbench:
   # Dated observation, not an address to hard-code: tests take TESTBENCH_URL
   # from the environment.
@@ -125,10 +125,16 @@ capabilities:
       The flash went over the XIAO's USB-C on SLOT4: the adapter cannot enter
       download mode until BOOT/EN are wired (esptool on SLOT3: "No serial data
       received"). Consequence: flashing through the adapter is proven under
-      dut-boot-en; until then the USB-C cannot move to the printer hub.
+      dut-boot-en; BOOT/EN are not wired (FSD 0.1.19), so every later image goes by
+      OTA and a cold flash uses this same USB-C route (FSD §2.2).
   dut-boot-en:
     what: Bench GPIO18/17 drive the XIAO's GPIO0 (BOOT) and EN — download mode (flashing through the adapter on SLOT3), reset, and the 10 s factory-reset hold (FR-2.17)
-    available: unproven
+    available: no
+    consequence: >-
+      Not wired, by user decision (FSD 0.1.19). Resets use the test build's `reboot`
+      (FR-19.5) or an operator power-cycle; NVS erase uses `wipe` (FR-19.6) or a cold
+      flash; updates go by OTA; BOOT presses (FR-2.17, FR-2.19, NFR-2.6) are operator
+      acts observed through `button: held`. bench-serial-reset and bench-gpio are unused.
   usb-host-hub-power:
     what: With the XIAO on the active hub's upstream port, the hub enables its downstream ports and the ESP sees devices attach (FSD R1)
     available: unproven
@@ -186,8 +192,8 @@ tests:
     phase: 1
     tier: bench
     verifies: [NFR-2.4, FR-20.1]
-    needs: [bench-flash, bench-serial-reset, bench-serial-monitor, dut-on-slot]
-    observable: 'flash (with erase) ok at flash_args offsets; after reset UART shows `boot: fw=<expected version>` then `state: PROVISIONING`'
+    needs: [bench-flash, bench-operator-prompt, operator, bench-serial-monitor, dut-on-slot]
+    observable: 'bench cold flash (FSD §2.2: operator moves USB-C to the Pi), with erase, ok at flash_args offsets; after the operator power-cycles, UART shows `boot: fw=<expected version>` then `state: PROVISIONING`'
     impl: null
     status: not done
     reason: test not written
