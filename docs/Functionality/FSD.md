@@ -224,7 +224,7 @@ verification:
     - For CONNECTING, OPERATIONAL and WIFI_RECOVERY: WiFi credentials (portal or `cred`), admin password (portal or `admin`) and MQTT settings (/settings) stored, DUT in that state.
     - For PROVISIONING: NVS erased (no credentials can exist in this state), DUT in PROVISIONING.
   stimulus:
-    - Operator holds BOOT for about 12 s (§25.0 button press; `button: held <ms> ms` must show ≥ 10000, else the run is repeated) — once from each source state: PROVISIONING, CONNECTING (bench AP stopped), OPERATIONAL, WIFI_RECOVERY (AP disabled after OPERATIONAL); between runs restore credentials (`cred`), admin password (`admin`) and MQTT settings (`POST /settings`).
+    - Operator holds BOOT for about 12 s (§25.0 button press; `button: held <ms> ms` must show ≥ 10000, else the run is repeated) — once from each source state: PROVISIONING, CONNECTING (bench AP stopped), OPERATIONAL, WIFI_RECOVERY (AP disabled after OPERATIONAL); in every run the bench AP is stopped after `reset: factory` and before the operator releases BOOT, so the bench scan and the bench station can observe the SoftAP; between runs restore credentials (`cred`), admin password (`admin`) and MQTT settings (`POST /settings`).
   expected_observations:
     - Log marker `reset: factory` then a reboot.
     - After reboot the setup SoftAP `MX320-Setup-<id>` is visible within 10 s.
@@ -478,7 +478,7 @@ verification:
 | FR-6.9 | Run 2 complete jobs, then abort a third (client RST) | `job.completed` +2 after the two; unchanged after the abort | Count changes on the aborted job | bench |
 | FR-6.11 | Abort 1 job (client RST) | `job.aborted` +1 | `job.completed` changes | bench |
 | FR-6.12 | Complete a 123 456-byte job, then abort a 4 KiB job after 2 KiB (client RST) | `job.last_bytes` = 123456, still 123456 after the abort | Value from the aborted job | bench |
-| FR-6.13 | Printer idle · send a 1 KiB job, half-close (client FIN) | Client receives the device's FIN ≤ 2 s after sending its own (a 1 KiB job reaches DONE well inside 1 s; + 1 s FR-6.13) (both timed on the client's clock); `job: done` logged | Connection left half-open > 1 s | bench |
+| FR-6.13 | Printer idle · send a 1 KiB job, half-close (client FIN) | Client receives the device's FIN ≤ 2 s after sending its own (a 1 KiB job reaches DONE well inside 1 s; + 1 s FR-6.13) (both timed on the client's clock); `job: done` logged | Client still without the device's FIN 2 s after sending its own | bench |
 | NFR-6.1 | Sink at full speed · 10 MiB job | Throughput ≥ 300 KiB/s client-measured over the whole job | Sink receives fewer bytes than sent | bench |
 
 ## 7. Printer Status Derivation
@@ -760,7 +760,7 @@ verification:
 | FR-13.3 | Subscribe · (a) reset DUT; (b) restart a broker that keeps no persistence (bench broker) while the DUT runs | Retained `online` (a) ≤ 5 s after `wifi: got ip`, (b) ≤ 30 s after the broker restart | No retained flag; `online` missing after the broker restart | bench |
 | FR-13.7 | Power off DUT (§2.2 bench power-off) | Broker publishes retained `offline` ≤ 50 s after the power-off prompt answer (1.5 × keepalive after the DUT's last packet, MQTT 3.1.1 §3.1.2.10, ≤ 45 s, + 5 s operator allowance, §25.0) | Retained `online` still retained 50 s after the prompt answer | bench |
 | FR-13.8 | DUT on the home WLAN, `mqtt_host` set to an MQTT listener on the test host · reboot | The CONNECT packet the listener decodes carries Keep Alive = 30 | Keep Alive ≠ 30; CONNECT without a will (FR-13.7) | bench |
-| FR-13.9 | DUT on the home WLAN · (a) `mqtt_host` = the HA broker's `.local` name (`ha-broker`), valid credentials, reboot; (b) `mqtt_host` = `nonexistent-mx320.local`, reboot | (a) `mqtt.connected: true` ≤ 30 s after `wifi: got ip`; (b) `mqtt.connected: false` for 60 s, `/api/status` answering throughout | (a) never connects; (b) reboot, `state` leaves OPERATIONAL | bench |
+| FR-13.9 | DUT on the home WLAN · (a) `mqtt_host` = the HA broker's `.local` name (env `HA_MQTT_HOST`, e.g. `ha-test.local`), valid credentials, reboot; (b) `mqtt_host` = `nonexistent-mx320.local`, reboot; (c) `mqtt_host` = the testbench's `.local` name with the bench broker running, then stop and restart the bench broker, with a passive mDNS listener on the test host | (a) `mqtt.connected: true` ≤ 30 s after `wifi: got ip`; (b) `mqtt.connected: false` for 60 s, `/api/status` answering throughout; (c) the listener sees an mDNS A query for that name from the DUT's IP before the first connect and again before the reconnect | (a) never connects; (b) reboot, `state` leaves OPERATIONAL; (c) reconnect without a fresh mDNS query | bench |
 | FR-13.4 | (a) DUT connects; (b) restart a broker that keeps no persistence while the DUT runs · read retained `homeassistant/#` after each | Five configs, schema-valid, same device block — (b) ≤ 30 s after the broker restart | Discovery for non-listed entities; configs missing after the broker restart | host (builder) + bench |
 | FR-13.6 | see FR-13.5 contract | — | — | bench |
 
@@ -1173,7 +1173,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.27
+fsd_version: 0.1.28
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1211,6 +1211,7 @@ change_history:
   - 0.1.25 2026-11-02 Load-defined round 22: setup SoftAP moved to 192.168.71.1/24 (off the bench AP subnet); FR-13.1 per-case anchors and 8 s paper-out; FR-7.2 6 s; keep-alive split out as FR-13.8 with a CONNECT-decoding contract; FR-6.13 1 KiB job; FR-2.16, FR-2.18, FR-2.20, FR-11.9, FR-12.7 contract fixes; portal client re-join on channel change; OD-3/OD-4 Phase 2 consequence
   - 0.1.26 2026-11-02 Load-defined round 23 (OPEN; minor fixes): FR-6.9/6.12 abort stimuli; FR-2.10 portal deadline; cold-flash erase defined; Phase 1 depends on UART only; broker-only contracts on the home WLAN (OD-7 narrowed); `button: held` one line per press; FR-2.17 forbids reboot while held
   - 0.1.27 2026-11-02 Change request (user): `mqtt_host` accepts mDNS `.local` names, resolved by the device (FR-13.9)
+  - 0.1.28 2026-11-02 Load-defined round 24 (OPEN; minor fixes): FR-13.9 names the broker env and observes re-resolution; FR-6.13 prohibition anchored; FR-2.17 stops the bench AP before observing the SoftAP
 superseded_requirements: []
 open_decisions:
   - id: OD-3

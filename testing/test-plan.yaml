@@ -326,7 +326,7 @@ tests:
     reason: test not written
 
 gates:
-  load-defined:       {verdict: OPEN, date: 2026-11-02, commit: c7a60df}   # fresh checker round 23 (0 blocking, 7 minor, fixed after per gate rule); rounds 17-22 SHUT after the no-BOOT/EN change request; round 16 OPEN at a79959a
+  load-defined:       {verdict: OPEN, date: 2026-11-02, commit: ef7d04f}   # fresh checker round 24 after the FR-13.9 change request (0 blocking, 5 minor, fixed after); round 23 OPEN at c7a60df
   ai-harnessed:       {verdict: OPEN, date: 2026-11-02, commit: f0e47bf}   # fresh checker round 3 (0 blocking, 6 minor, fixed after per gate rule); rounds 1-2 SHUT
   dut-ready:          {verdict: null, date: null, commit: null}
   ready-for-shipment: {verdict: null, date: null, commit: null}
