@@ -86,8 +86,8 @@ reach the network, and contracts whose precondition is a release build on
 erased NVS: an operator, prompted through `/api/human-interaction`, first
 disconnects the hub's 5 V supply wherever it feeds the XIAO (so the XIAO is
 unpowered and the hub's 5 V never meets the Pi's VBUS), unplugs the XIAO's
-USB-C from the hub's upstream port and plugs it into the Pi **while holding
-BOOT**, releasing it once plugged in — the chip starts in ROM download
+USB-C from the hub's upstream port — in Phase 1, where the USB-C is already on
+the Pi, from the Pi — and plugs it into the Pi **while holding BOOT**, releasing it once plugged in — the chip starts in ROM download
 mode (R7), which works whatever the installed firmware does with the USB PHY;
 the testbench flashes through that native-USB slot (with erase where the
 contract says so) and resets the chip; the operator moves the cable back and reconnects the hub's 5 V. The MX320 is absent from the ESP during it.
@@ -110,7 +110,7 @@ Every NFR-2.x constraint below is **[Must]**.
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | NFR-2.1–2.3 | Chip read (§25.0) during a bench cold flash; then reset | Chip ESP32-S3, flash 8 MB; `boot:` marker with `flash=8 psram=8` | `psram=0` | bench (commissioning) |
-| NFR-2.4 | Reset DUT, read UART adapter | Boot banner at 115200 on GPIO43 | No banner on the UART adapter within 5 s of the `boot:` marker's expected time (reset sent) | bench |
+| NFR-2.4 | Reset DUT, read UART adapter | Boot banner at 115200 on GPIO43 | No banner on the UART adapter within 5 s of the reset being sent | bench |
 | NFR-2.5 | Attach printer to USB-C via hub | FR-8.1 passes; console lines keep arriving on the UART adapter | Printer not claimed; DUT reboot on attach | bench |
 | NFR-2.6 | Running · operator holds BOOT (§25.0 button press) for about 12 s | `button: held <ms> ms` with ms ≥ 10000, then `reset: factory` (FR-2.17) | `reset: factory` without a preceding `button: held` line | bench |
 | NFR-2.7 | Printer behind two cascaded hubs | Printer not claimed; log `usb: hub depth exceeded` | Crash | bench |
@@ -245,7 +245,7 @@ verification:
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.4.1/`, following redirects, ends in 200 with the setup page ≤ 10 s after the `boot:` marker | DUT joins any other network | bench |
+| FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.4.1/`, following redirects, ends in 200 with the setup page; SoftAP beacon in a bench scan ≤ 10 s after the `boot:` marker (the bench's own join and relay time is not counted) | DUT joins any other network | bench |
 | FR-2.11 | Credentials stored (FR-19.1 or portal) · reset | Log `state: CONNECTING` ≤ 2 s after the `boot:` marker | SoftAP started | bench |
 | FR-2.12 | Credentials stored, AP up; for the Phase 4 exit also printer present and broker configured · reset | Each ≤ 5 s after `wifi: got ip`: `/api/status` 200; mDNS A answer; TCP :9100 accepts; retained `online` on the broker (Phase 1 exit: `/api/status` only) | A service answering before `wifi: got ip` | bench |
 | FR-2.13 | Credentials for the bench AP stored · reset with (a) the bench AP stopped, (b) the bench AP up with a different password | For 5 min: successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | SoftAP started; reboot | bench |
@@ -475,7 +475,7 @@ verification:
 | FR-6.9 | Run 2 complete jobs | `job.completed` +2 | Count changes on an aborted job | bench |
 | FR-6.11 | Abort 1 job (client RST) | `job.aborted` +1 | `job.completed` changes | bench |
 | FR-6.12 | Complete a 123 456-byte job | `job.last_bytes` = 123456 | Value from an aborted job | bench |
-| FR-6.13 | Send job, close | Device FIN ≤ 1 s after `job: done` | Connection left half-open > 1 s | bench |
+| FR-6.13 | Send job, half-close (client FIN) | Client receives the device's FIN ≤ 1 s after sending its own (both timed on the client's clock); `job: done` logged | Connection left half-open > 1 s | bench |
 | NFR-6.1 | Sink at full speed · 10 MiB job | Throughput ≥ 300 KiB/s client-measured over the whole job | Sink receives fewer bytes than sent | bench |
 
 ## 7. Printer Status Derivation
@@ -651,7 +651,7 @@ verification:
 |---|---|---|---|---|
 | FR-11.1 | GET / | 200, HTML containing the six fields | Password values present | bench |
 | FR-11.2 | GET /api/status | Valid against Appendix B schema; ≤ 2 s | Missing required key | host (serializer) + bench |
-| FR-11.10 | (a) Bench cold flash with erase of test image X, then `cred` (FR-19.1) and `reboot` (FR-19.5) to reach OPERATIONAL: GET; (b) then OTA image Y (FR-11.3), GET after its reboot | (a) `running` = `ota_0`; `ota_0_sha256` = SHA-256 of X padded with 0xFF to 0x300000; `ota_1_sha256` = SHA-256 of 0x300000 bytes of 0xFF. (b) `running` = `ota_1`; `ota_1_sha256` differs from (a); `ota_0_sha256` unchanged; each answer ≤ 5 s | A hash equal to its value before (b) for the slot just written; auth demanded | bench |
+| FR-11.10 | (a) Bench cold flash with erase of test image X, then `cred` (FR-19.1), `admin` (FR-19.3) and `reboot` (FR-19.5) to reach OPERATIONAL: GET; (b) then OTA image Y (FR-11.3), GET after its reboot | (a) `running` = `ota_0`; `ota_0_sha256` = SHA-256 of X padded with 0xFF to 0x300000; `ota_1_sha256` = SHA-256 of 0x300000 bytes of 0xFF. (b) `running` = `ota_1`; `ota_1_sha256` differs from (a); `ota_0_sha256` unchanged; each answer ≤ 5 s | A hash equal to its value before (b) for the slot just written; auth demanded | bench |
 | FR-11.4 | POST image, no / wrong auth | 401; SHA-256 of `ota_0` and `ota_1` (slot read, §25.0) unchanged | Flash write | bench |
 | FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical; inactive-slot SHA-256 (slot read, §25.0) unchanged | Reboot mid-job; inactive slot written | bench |
 | FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) a valid ESP32-S3 image (magic 0xE9, ESP32-S3 chip ID) padded to 3 145 729 bytes (0x300001), so only its size is wrong | 400; no reboot; version unchanged | Boot into partial image | bench |
@@ -1064,6 +1064,12 @@ duration; the observation is the DUT's own `button: held <ms> ms` marker, never
 the operator's timing. A run whose marker falls on the wrong side of 10 000 ms
 for the contract is repeated, not judged.
 
+**Bench-AP client.** Contracts that toggle the bench AP (FR-2.14, FR-2.15,
+FR-13.5) need the DUT on the bench AP (192.168.4.0/24) and a RAW TCP client
+reaching it there; the bench broker runs on that network (192.168.4.1:1883).
+HTTP to the DUT on that network goes through the bench relay
+(`/api/wifi/http`); a raw TCP path is not declared by the bench (OD-7).
+
 **Portal client.** Contracts that use the setup portal (§12, FR-2.10,
 FR-2.18) reach it through the bench station (`/api/wifi/sta_join` to the setup
 SSID, then `/api/wifi/http`); where a contract also needs the bench AP up, the
@@ -1149,13 +1155,13 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.21
+fsd_version: 0.1.22
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
 author: user + Claude (/define)
 reviewers: []
-approval_status: pending — OD-1/OD-2/OD-5 accepted; OD-3/OD-4/OD-6 open; udp_log_host default still proposed
+approval_status: pending — OD-1/OD-2/OD-5 accepted; OD-3/OD-4/OD-6/OD-7 open; udp_log_host default still proposed
 created: 2026-11-01
 last_updated: 2026-11-02
 change_history:
@@ -1181,6 +1187,7 @@ change_history:
   - 0.1.19 2026-11-02 Change request (user): no BOOT/EN wiring. Bench topology without control lines; bench cold flash defined (§2.2); updates by OTA; test-build `reboot`/`wipe` (FR-19.5–19.8); BOOT presses by operator observed through `button: held`; §25.0 defines bench reset, NVS erased, button press
   - 0.1.20 2026-11-02 Load-defined round 17: slot read via `GET /api/slots` (FR-11.10); chip read during cold flash; cold flash enters ROM download mode with BOOT held; FR-2.17 evidence/tolerance, FR-19.2 prohibition, §4/§24 flashing text, NFR-17.1 cleanup; OD-6 bench AP + station
   - 0.1.21 2026-11-02 Load-defined round 18: power-cycle defined for Phase 1 (USB-C on the Pi); cold flash disconnects hub 5 V first; FR-2.10/2.11 timed from `boot:`; FR-11.10 tier and post-OTA reboot; FR-2.17 restores credentials by `cred`; FR-12.5 on the home WLAN; NFR-2.4/2.5 observable prohibitions
+  - 0.1.22 2026-11-02 Load-defined round 19: OD-7 raw TCP to the bench-AP network; §25.0 Bench-AP client; Phase 1 cold-flash variant; FR-11.10 sets admin; NFR-2.4 anchor; FR-6.13 timed on the client clock; FR-2.10 bench join time excluded
 superseded_requirements: []
 open_decisions:
   - id: OD-3
@@ -1189,6 +1196,9 @@ open_decisions:
   - id: OD-4
     gates: [FR-2.15, FR-6.1–FR-6.6, FR-6.8, FR-6.10, NFR-6.1, FR-7.2 (case b), FR-8.6, FR-11.5, FR-13.1 (case c), FR-13.5, NFR-17.2]
     text: Availability of a USB printer-class sink on the bench (A3). Without it the byte-exact contracts run against the real MX320 and lose byte-exactness, and FR-7.2 (case b), FR-8.6 (a–c) and FR-13.1 (case c) cannot run at all (the MX320 cannot produce those stimuli on demand) — so neither the Phase 3 exit nor the Phase 4 exit (FR-13.1 case c, FR-13.5) can close until OD-4 is settled with a sink, or those contracts are amended.
+  - id: OD-7
+    gates: [FR-2.14, FR-2.15, FR-13.5, "FR-20.1 (`job: abort … reason=wifi` row)"]
+    text: A raw TCP path from the test host to a DUT on the bench AP (§25.0 Bench-AP client). The bench relays HTTP only; without a TCP relay or a routed path (testbench change request), these contracts cannot send their job and the Phase 3 exit (and FR-13.5 in Phase 4) cannot close.
   - id: OD-6
     gates: [FR-2.18, FR-12.2, FR-12.3]
     text: Whether the testbench can keep its AP up while its station is joined to the DUT's setup SoftAP (§25.0 Portal client). Not declared by the bench; if it cannot, the bench gains it (testbench change request) or these stimuli are amended. Phase 4 exit cannot close until settled.

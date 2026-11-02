@@ -80,6 +80,13 @@ capabilities:
       directly (procedure P-PROVISION). Running this station while the bench AP is
       up is not declared by the bench. Consequence: FR-2.18, FR-12.2 and FR-12.3
       stay blocked until the bench declares it or the FSD amends their stimulus.
+  bench-ap-tcp:
+    what: Raw TCP from the test host to a DUT on the bench AP (192.168.4.0/24) — RAW :9100 jobs during AP toggling (FSD OD-7)
+    available: no
+    consequence: >-
+      The bench relays HTTP only (/api/wifi/http). FR-2.14, FR-2.15, FR-13.5 and the
+      `job: abort … reason=wifi` marker are blocked until a testbench change request
+      adds a TCP relay or a routed path.
   bench-wifi-scan:
     what: WiFi scan from the bench radio (GET /api/wifi/scan)
     available: yes
@@ -170,7 +177,7 @@ capabilities:
     what: A second USB hub (cascade for NFR-2.7) and a USB flash drive (FR-8.5, FR-8.8) on the product hub
     available: unproven
   dut-power-cycle:
-    what: Power the DUT off and on as FSD §2.2 defines — operator disconnects the hub's 5 V supply on a bench prompt; the UART adapter is not a power path to the XIAO
+    what: Power the DUT off and on as FSD §2.2 defines — on a bench prompt the operator unplugs the XIAO's USB-C from the Pi (Phase 1) or disconnects the hub's 5 V supply (Phase 2 on); in both the UART adapter is not a power path to the XIAO
     available: unproven
   operator:
     what: A person at the bench answers portal prompts (page printed, paper removed, printer unplugged)
