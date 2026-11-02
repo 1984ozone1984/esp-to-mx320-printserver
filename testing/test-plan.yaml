@@ -185,8 +185,17 @@ capabilities:
       The Windows PC is down and has not been seen on mDNS. Consequence: Windows
       client checks wait (Mac-first decision); agenda #11 stays open for the PC only.
   ha-broker:
-    what: The Home Assistant MQTT broker, reachable from the home WLAN and from the devcontainer (MQTT_HOST/USER/PASS in host env)
-    available: unproven
+    what: The Home Assistant MQTT broker, reachable from the home WLAN and from the devcontainer (HA_MQTT_HOST/HA_MQTT_USER/HA_MQTT_PASS, same secrets file as home-wlan)
+    available: yes
+    observed: >-
+      2026-11-02: HA_MQTT_HOST = ha-test.local, resolved by mDNS to 192.168.8.32;
+      port 1883 with the stored user/password: CONNACK Success; a QoS 1 publish to
+      a fresh mx320/commission/<id> topic came back on the same client's
+      subscription. HA's own MQTT listener was not observed (broker-level proof).
+    limitation: >-
+      The broker is named by a .local host. Whether the DUT's mqtt_host accepts
+      and resolves an mDNS .local name is not stated by FSD §19 (open question to
+      the user); until then tests configure the broker by its IPv4 address.
   usb-test-peripherals:
     what: A second USB hub (cascade for NFR-2.7) and a USB flash drive (FR-8.5, FR-8.8) on the product hub
     available: unproven
