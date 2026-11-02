@@ -61,7 +61,7 @@ capabilities:
     what: Hard-reset the DUT through POST /api/serial/reset (DTR/RTS or EN GPIO)
     available: yes
   bench-gpio:
-    what: Drive Pi GPIO 16-27 high/low/high-Z (POST /api/gpio/set) — used to hold the DUT's BOOT button line
+    what: Drive Pi GPIO 16-27 high/low/high-Z (POST /api/gpio/set) — unused by this project (no BOOT/EN wiring, dut-boot-en)
     available: yes
   bench-wifi-ap:
     what: Start and stop the bench SoftAP on demand (/api/wifi/ap_start, ap_stop) — AP outages for WiFi-recovery tests
