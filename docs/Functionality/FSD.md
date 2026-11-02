@@ -220,10 +220,10 @@ verification:
 id: FR-2.17
 verification:
   preconditions:
-    - For CONNECTING, OPERATIONAL and WIFI_RECOVERY: WiFi credentials, admin password and MQTT settings stored (portal or /settings), DUT in that state.
+    - For CONNECTING, OPERATIONAL and WIFI_RECOVERY: WiFi credentials (portal or `cred`), admin password (portal or `admin`) and MQTT settings (/settings) stored, DUT in that state.
     - For PROVISIONING: NVS erased (no credentials can exist in this state), DUT in PROVISIONING.
   stimulus:
-    - Operator holds BOOT for about 12 s (§25.0 button press; `button: held <ms> ms` must show ≥ 10000, else the run is repeated) — once from each source state: PROVISIONING, CONNECTING (bench AP stopped), OPERATIONAL, WIFI_RECOVERY (AP disabled after OPERATIONAL); restore credentials with `cred` (test build, FR-19.1) between runs.
+    - Operator holds BOOT for about 12 s (§25.0 button press; `button: held <ms> ms` must show ≥ 10000, else the run is repeated) — once from each source state: PROVISIONING, CONNECTING (bench AP stopped), OPERATIONAL, WIFI_RECOVERY (AP disabled after OPERATIONAL); between runs restore credentials (`cred`), admin password (`admin`) and MQTT settings (`POST /settings`).
   expected_observations:
     - Log marker `reset: factory` then a reboot.
     - After reboot the setup SoftAP `MX320-Setup-<id>` is visible within 10 s.
@@ -240,7 +240,7 @@ verification:
     - Reset fires on a hold whose `button: held` line shows < 10000 ms (see FR-2.19).
   tier: bench
   evidence: [operator prompt answers, UART log with `button: held`, SoftAP scan, /api/status]
-  cleanup: [Restore bench-AP credentials with `cred` (FR-19.1) and `reboot`]
+  cleanup: [Restore bench-AP credentials (`cred`), admin password (`admin`), MQTT settings (`POST /settings`), then `reboot`]
 ```
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
@@ -750,7 +750,7 @@ verification:
 | FR-13.1 | Subscribed · (a) start a job, (b) complete it, (c) set the sink's port status to paper-out, (d) abort a job (client RST) | A new retained state ≤ 2 s after each: (a) `printing: true`, (b) `job.completed` +1, (c) `printer.status: paper_out`, (d) `job.aborted` +1 | Message without retain flag; a message still showing the previous value | bench |
 | FR-13.2 | Idle 3 min | ≥ 3 state messages | Gap > 70 s | bench |
 | FR-13.3 | Subscribe · (a) reset DUT; (b) restart a broker that keeps no persistence (bench broker) while the DUT runs | Retained `online` (a) ≤ 5 s after `wifi: got ip`, (b) ≤ 30 s after the broker restart | No retained flag; `online` missing after the broker restart | bench |
-| FR-13.7 | Power off DUT (§2.2 bench power-off) | Broker publishes retained `offline` ≤ 45 s after power-off (1.5 × keepalive, MQTT 3.1.1 §3.1.2.10) | Retained `online` stays | bench |
+| FR-13.7 | Power off DUT (§2.2 bench power-off) | Broker publishes retained `offline` ≤ 45 s after power-off (1.5 × keepalive, MQTT 3.1.1 §3.1.2.10), and not before 35 s (a keepalive ≤ 20 s gives ≤ 30 s, + 5 s operator allowance, §25.0) | Retained `online` stays; `offline` < 35 s | bench |
 | FR-13.4 | (a) DUT connects; (b) restart a broker that keeps no persistence while the DUT runs · read retained `homeassistant/#` after each | Five configs, schema-valid, same device block — (b) ≤ 30 s after the broker restart | Discovery for non-listed entities; configs missing after the broker restart | host (builder) + bench |
 | FR-13.6 | see FR-13.5 contract | — | — | bench |
 
@@ -1068,7 +1068,10 @@ for the contract is repeated, not judged.
 FR-13.5) need the DUT on the bench AP (192.168.4.0/24) and a RAW TCP client
 reaching it there; the bench broker runs on that network (192.168.4.1:1883).
 HTTP to the DUT on that network goes through the bench relay
-(`/api/wifi/http`); a raw TCP path is not declared by the bench (OD-7).
+(`/api/wifi/http`); a raw TCP path is not declared by the bench (OD-7). The
+test host reads the bench broker (subscriptions, retained topics) on the
+bench's LAN address, port 1883 — the same broker the DUT reaches as
+192.168.4.1:1883 (`bench-mqtt-broker`).
 
 **Portal client.** Contracts that use the setup portal (§12, FR-2.10,
 FR-2.18) reach it through the bench station (`/api/wifi/sta_join` to the setup
@@ -1076,12 +1079,14 @@ SSID, then `/api/wifi/http`); where a contract also needs the bench AP up, the
 bench must hold its AP and that station at once — a bench capability the
 test plan records (`bench-wifi-sta`), not something this project proves.
 
-**Printer attach/detach instant.** Deadlines measured from a printer attach or
-detach (FR-6.6, FR-8.1, FR-8.3) start at the instant the switching instrument
-records. When an operator switches, the bench prompt says "unplug (or plug)
-when you press OK" and the instant is the prompt's answer time; the operator
-acts after it, so the measured interval can only be longer than the real one —
-a pass is conclusive, a fail is repeated with an instrument before it counts.
+**Operator-act instant.** Deadlines measured from a physical act — printer
+attach or detach (FR-6.6, FR-8.1, FR-8.3), power-off (FR-13.7), paper removal
+(FR-7.2 a) — start at the instant an instrument records. When an operator acts,
+the bench prompt says "do it when you press OK, within 5 s" and the instant is
+the prompt's answer time; the operator acts after it, so the measured interval
+can only be longer than the real one (by at most 5 s) — an upper-bound pass is
+conclusive, an upper-bound fail is repeated before it counts, and a lower
+bound is stated with that 5 s already allowed for.
 
 The component × tier matrix is generated by `/build` from
 `testing/test-plan.yaml`.
@@ -1155,7 +1160,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.22
+fsd_version: 0.1.23
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1188,20 +1193,21 @@ change_history:
   - 0.1.20 2026-11-02 Load-defined round 17: slot read via `GET /api/slots` (FR-11.10); chip read during cold flash; cold flash enters ROM download mode with BOOT held; FR-2.17 evidence/tolerance, FR-19.2 prohibition, §4/§24 flashing text, NFR-17.1 cleanup; OD-6 bench AP + station
   - 0.1.21 2026-11-02 Load-defined round 18: power-cycle defined for Phase 1 (USB-C on the Pi); cold flash disconnects hub 5 V first; FR-2.10/2.11 timed from `boot:`; FR-11.10 tier and post-OTA reboot; FR-2.17 restores credentials by `cred`; FR-12.5 on the home WLAN; NFR-2.4/2.5 observable prohibitions
   - 0.1.22 2026-11-02 Load-defined round 19: OD-7 raw TCP to the bench-AP network; §25.0 Bench-AP client; Phase 1 cold-flash variant; FR-11.10 sets admin; NFR-2.4 anchor; FR-6.13 timed on the client clock; FR-2.10 bench join time excluded
+  - 0.1.23 2026-11-02 Load-defined round 20: test host reads the bench broker on the bench LAN address; operator-act instant generalised; FR-13.7 lower bound; OD-3 consequence; FR-13.6 in OD-4/OD-7; OD-6 covers relay DNS (FR-12.1); FR-2.17 preconditions and restore steps
 superseded_requirements: []
 open_decisions:
   - id: OD-3
     gates: [FR-7.1, FR-7.2]
-    text: R3 — whether the MX320 maintains 1284 port-status bits; resolved at commissioning.
+    text: R3 — whether the MX320 maintains 1284 port-status bits; resolved at commissioning. If the bits are static, FR-7.1 states degrade to present/absent and FR-7.2 is amended; until then the Phase 2 exit item FR-7.2 (idle case a) cannot close (case b also needs the sink, OD-4).
   - id: OD-4
-    gates: [FR-2.15, FR-6.1–FR-6.6, FR-6.8, FR-6.10, NFR-6.1, FR-7.2 (case b), FR-8.6, FR-11.5, FR-13.1 (case c), FR-13.5, NFR-17.2]
+    gates: [FR-2.15, FR-6.1–FR-6.6, FR-6.8, FR-6.10, NFR-6.1, FR-7.2 (case b), FR-8.6, FR-11.5, FR-13.1 (case c), FR-13.5, FR-13.6, NFR-17.2]
     text: Availability of a USB printer-class sink on the bench (A3). Without it the byte-exact contracts run against the real MX320 and lose byte-exactness, and FR-7.2 (case b), FR-8.6 (a–c) and FR-13.1 (case c) cannot run at all (the MX320 cannot produce those stimuli on demand) — so neither the Phase 3 exit nor the Phase 4 exit (FR-13.1 case c, FR-13.5) can close until OD-4 is settled with a sink, or those contracts are amended.
   - id: OD-7
-    gates: [FR-2.14, FR-2.15, FR-13.5, "FR-20.1 (`job: abort … reason=wifi` row)"]
+    gates: [FR-2.14, FR-2.15, FR-13.5, FR-13.6, "FR-20.1 (`job: abort … reason=wifi` row)"]
     text: A raw TCP path from the test host to a DUT on the bench AP (§25.0 Bench-AP client). The bench relays HTTP only; without a TCP relay or a routed path (testbench change request), these contracts cannot send their job and the Phase 3 exit (and FR-13.5 in Phase 4) cannot close.
   - id: OD-6
-    gates: [FR-2.18, FR-12.2, FR-12.3]
-    text: Whether the testbench can keep its AP up while its station is joined to the DUT's setup SoftAP (§25.0 Portal client). Not declared by the bench; if it cannot, the bench gains it (testbench change request) or these stimuli are amended. Phase 4 exit cannot close until settled.
+    gates: [FR-2.18, FR-12.1, FR-12.2, FR-12.3]
+    text: Whether the testbench can keep its AP up while its station is joined to the DUT's setup SoftAP (§25.0 Portal client), and whether its HTTP relay resolves hostnames (the FR-12.1 probes) through the DNS server of the network the station joined (the DUT's catch-all). Not declared by the bench; if it cannot, the bench gains it (testbench change request) or these stimuli are amended. Phase 4 exit cannot close until settled.
 related_test_baseline: testing/test-plan.yaml
 ```
 

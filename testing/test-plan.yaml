@@ -97,7 +97,7 @@ capabilities:
     what: Receive DUT UDP log lines on port 5555 (GET /api/udplog)
     available: yes
   bench-mqtt-broker:
-    what: Start/stop the mosquitto test broker on the bench (/api/mqtt/start, stop) — broker outages
+    what: Start/stop the mosquitto test broker on the bench (/api/mqtt/start, stop) — broker outages; DUTs reach it at 192.168.4.1:1883, the test host subscribes on the bench's LAN address :1883
     available: yes
     limitation: >-
       Embedded-AI-Harness#59 — the broker never writes its log. Consequence: broker
@@ -155,9 +155,10 @@ capabilities:
     what: A USB printer-class device that records every bulk-OUT byte, can pause (NAK) on command, and returns a set Device ID (incl. zero-length or STALL) and port status (FSD §25.0, OD-4)
     available: no
     consequence: >-
-      Does not exist yet. Byte-exact and stall contracts (FR-6.1/6.2/6.5/6.8, NFR-6.1,
-      FR-8.5-8.7, NFR-17.2) can run only against the real MX320, without byte
-      comparison, until it is built.
+      Does not exist yet (FSD OD-4 is authoritative). Byte-exact contracts (FR-2.15,
+      FR-6.1-6.6, FR-6.8, FR-6.10, NFR-6.1, FR-11.5, FR-13.5, FR-13.6, NFR-17.2) run only
+      against the real MX320 without byte comparison; FR-7.2 (b), FR-8.6 and
+      FR-13.1 (c) cannot run at all until it is built.
   printer-detach:
     what: Detach and re-attach the printer's USB on demand while the DUT runs (operator prompt, or a switchable hub port)
     available: unproven
