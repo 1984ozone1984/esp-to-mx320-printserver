@@ -37,6 +37,12 @@ capabilities:
       Embedded-AI-Harness#52 — only the first option of a flash_args line is applied
       (images flashed at 40 MHz). Consequence: none for correctness; boot timing may
       differ from a USB-flashed unit.
+  bench-flash-read:
+    what: Read a flash region back with its SHA-256 through POST /api/flash/read — FSD §25.0 "slot read"; resets the DUT
+    available: yes
+  bench-chip-info:
+    what: Read chip, flash size and MAC through POST /api/chip/info — FSD §25.0 "chip read"; resets the DUT
+    available: yes
   bench-serial-monitor:
     what: Capture DUT console lines with pattern match and a recorded buffer (/api/serial/monitor, /api/serial/output)
     available: yes
@@ -246,7 +252,7 @@ tests:
     reason: test not written
 
 gates:
-  load-defined:       {verdict: SHUT, date: 2026-11-01, commit: 299eacb}   # fresh checker round 14 (0 blocking, 2 minor); rounds 1-13 SHUT
+  load-defined:       {verdict: SHUT, date: 2026-11-02, commit: dfafcb6}   # fresh checker round 15 (0 blocking, 5 minor); rounds 1-14 SHUT
   ai-harnessed:       {verdict: SHUT, date: 2026-11-01, commit: 6587fb1}   # fresh checker round 2: load-defined verdict unrecorded; round 1 SHUT at cdb85f1 (release-verification declared yes)
   dut-ready:          {verdict: null, date: null, commit: null}
   ready-for-shipment: {verdict: null, date: null, commit: null}

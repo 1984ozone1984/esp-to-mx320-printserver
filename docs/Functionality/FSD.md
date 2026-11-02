@@ -95,7 +95,7 @@ Every NFR-2.x constraint below is **[Must]**.
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| NFR-2.1–2.3 | `/api/chip/info` via the UART adapter; reset | Chip ESP32-S3, flash 8 MB; `boot:` marker with `flash=8 psram=8` | `psram=0` | bench (commissioning) |
+| NFR-2.1–2.3 | Chip read (§25.0) via the UART adapter; reset | Chip ESP32-S3, flash 8 MB; `boot:` marker with `flash=8 psram=8` | `psram=0` | bench (commissioning) |
 | NFR-2.4 | Reset DUT, read UART adapter | Boot banner at 115200 on GPIO43 | Banner only on USB-Serial/JTAG | bench |
 | NFR-2.5 | Attach printer to USB-C via hub | FR-8.1 passes | Console output on the USB-C port | bench |
 | NFR-2.6 | Running · hold BOOT (GPIO0) 11 s | `reset: factory` logged (FR-2.17) | `reset: factory` with BOOT untouched | bench |
@@ -227,7 +227,7 @@ verification:
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.4.1/` returns 200 ≤ 10 s after reset | DUT joins any other network | bench |
+| FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.4.1/`, following redirects, ends in 200 with the setup page ≤ 10 s after reset | DUT joins any other network | bench |
 | FR-2.11 | Credentials stored (FR-19.1 or portal) · reset | Log `state: CONNECTING` ≤ 2 s after reset | SoftAP started | target |
 | FR-2.12 | Credentials stored, AP up; for the Phase 4 exit also printer present and broker configured · reset | Each ≤ 5 s after `wifi: got ip`: `/api/status` 200; mDNS A answer; TCP :9100 accepts; retained `online` on the broker (Phase 1 exit: `/api/status` only) | A service answering before `wifi: got ip` | bench |
 | FR-2.13 | Credentials for the bench AP stored · reset with (a) the bench AP stopped, (b) the bench AP up with a different password | For 5 min: successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | SoftAP started; reboot | bench |
@@ -626,8 +626,8 @@ verification:
 |---|---|---|---|---|
 | FR-11.1 | GET / | 200, HTML containing the six fields | Password values present | bench |
 | FR-11.2 | GET /api/status | Valid against Appendix B schema; ≤ 2 s | Missing required key | host (serializer) + bench |
-| FR-11.4 | POST image, no / wrong auth | 401; running partition and inactive slot hash unchanged | Flash write | bench |
-| FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical; inactive-slot SHA-256 (`/api/flash/read`) unchanged | Reboot mid-job; inactive slot written | bench |
+| FR-11.4 | POST image, no / wrong auth | 401; SHA-256 of `ota_0` and `ota_1` (slot read, §25.0) unchanged | Flash write | bench |
+| FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical; inactive-slot SHA-256 (slot read, §25.0) unchanged | Reboot mid-job; inactive slot written | bench |
 | FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) a valid ESP32-S3 image (magic 0xE9, ESP32-S3 chip ID) padded to 3 145 729 bytes (0x300001), so only its size is wrong | 400; no reboot; version unchanged | Boot into partial image | bench |
 | FR-11.7 | GET /settings and POST /settings, each without auth | Both 401; `/api/status` `config.*` unchanged | Settings page served; any field persisted | bench |
 | FR-11.9 | DUT on the home WLAN (HA broker reachable), valid credentials · POST hostname `mx320-new`, MQTT host/port/user/password of the HA broker, admin_pass `newpass12`; then reset | 200; at once: `config.mqtt_*` show the new values, the old admin password gets 401 and `newpass12` 200; after the reset: `config.hostname` = `mx320-new`, `mx320-new.local` resolves, `mqtt.connected: true` ≤ 30 s after `wifi: got ip` | A submitted field not persisted; admin change waiting for a reboot | bench |
@@ -745,7 +745,7 @@ Exercised via FR-2.11–FR-2.18 and §12.
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| NFR-14.1 | Idle 2 min · 20 mDNS queries, 20 connects, 3 s apart | ≥ 19 of each answered ≤ 500 ms | Any unanswered > 2 s | bench |
+| NFR-14.1 | Idle 2 min · 20 mDNS queries, 20 connects, 3 s apart | ≥ 19 of each answered ≤ 500 ms | 2 or more of either left unanswered after 2 s; reboot | bench |
 
 ## 15. USB Host Library and Hub Support
 
@@ -852,9 +852,9 @@ verification:
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | FR-19.1 | Test build, NVS erased, PROVISIONING · write `cred <bench SSID> <pass>` via `/api/serial/write`, reset | `cred: stored`; after reset `state: CONNECTING` then `wifi: got ip` | `state: PROVISIONING` after the reset | bench |
-| FR-19.2 | Release build, NVS erased · write the same line, reset | No `cred: stored`; after reset `state: PROVISIONING` | Any NVS change; `state: CONNECTING` | bench |
+| FR-19.2 | Release build, NVS erased · write the same line, reset | No `cred: stored`; after reset `state: PROVISIONING` | Any NVS change other than the `boot_count` increment of the reset; `state: CONNECTING` | bench |
 | FR-19.3 | Test build, credentials stored via `cred` (FR-19.1), OPERATIONAL · write `admin testpass1`; then `POST /api/ota` of a valid image with `admin:testpass1` | `admin: stored`; OTA answers 200 | OTA 401 with the stored password | bench |
-| FR-19.4 | Release build on the network: on a test build store credentials (`cred`) and admin password `oldpass12` (`admin`), then OTA to the release image (NVS survives OTA) · write `admin testpass1`; then `POST /api/ota` with `admin:testpass1` | No `admin: stored`; OTA answers 401; inactive slot unchanged | OTA accepted with that password | bench |
+| FR-19.4 | Release build on the network: on a test build store credentials (`cred`) and admin password `oldpass12` (`admin`), then OTA to the release image (NVS survives OTA) · write `admin testpass1`; then `POST /api/ota` with `admin:testpass1` | No `admin: stored`; OTA answers 401; inactive-slot SHA-256 (slot read, §25.0) unchanged | OTA accepted with that password | bench |
 
 Each validation rule owes a negative test (FR-11.8, FR-12.4); each persistence
 rule owes a persistence test (NFR-16.1, FR-2.17).
@@ -1000,6 +1000,13 @@ byte-exact and stall contracts; the real MX320 cannot report what it received.
 Whether the testbench already provides it is a `/build` / `/commission`
 question.
 
+Two bench observations used by contracts, both through the DUT's UART adapter
+slot and both resetting the DUT (so each is taken last, after every other
+observation of its contract): **slot read** — `POST /api/flash/read` of a §23
+partition at its offset and size, compared by the returned SHA-256 (taken
+before and after the stimulus); **chip read** — `POST /api/chip/info`,
+reporting chip, flash size and MAC.
+
 The component × tier matrix is generated by `/build` from
 `testing/test-plan.yaml`.
 
@@ -1072,7 +1079,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.16
+fsd_version: 0.1.17
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1080,7 +1087,7 @@ author: user + Claude (/define)
 reviewers: []
 approval_status: pending — OD-1/OD-2/OD-5 accepted; OD-3/OD-4 open; udp_log_host default still proposed
 created: 2026-11-01
-last_updated: 2026-11-01
+last_updated: 2026-11-02
 change_history:
   - 0.1.0 2026-11-01 initial FSD
   - 0.1.1 2026-11-01 OD-1 and OD-2 accepted by the user; values approved
@@ -1099,6 +1106,7 @@ change_history:
   - 0.1.14 2026-11-01 Load-defined round 12 (minor only): hostname ending in `-` tested; lockout 429 observed on every admin endpoint
   - 0.1.15 2026-11-01 Load-defined round 13 (minor only): FR-2.14 and FR-10.3 timed from their defining markers; FR-11.6(c) differs from a valid image only in size
   - 0.1.16 2026-11-01 Load-defined round 14 (minor only): factory reset keeps boot_count; NFR-16.1 checks both stored passwords survive
+  - 0.1.17 2026-11-02 Load-defined round 15 (minor only): FR-19.2 exempts boot_count; NFR-14.1 prohibition matches 19-of-20; FR-2.10 follows redirects; slot read and chip read defined (§25.0); OD-4 consequence names the sink-only contracts
 superseded_requirements: []
 open_decisions:
   - id: OD-3
@@ -1106,7 +1114,7 @@ open_decisions:
     text: R3 — whether the MX320 maintains 1284 port-status bits; resolved at commissioning.
   - id: OD-4
     gates: [FR-2.15, FR-6.1–FR-6.5, FR-6.8, FR-6.10, NFR-6.1, FR-7.2 (case b), FR-8.5–FR-8.8, FR-13.1 (case c), NFR-17.2]
-    text: Availability of a USB printer-class sink on the bench (A3); without it these contracts can only run against the real MX320 and lose byte-exactness.
+    text: Availability of a USB printer-class sink on the bench (A3). Without it the byte-exact contracts run against the real MX320 and lose byte-exactness, and FR-7.2 (case b), FR-8.6 (a–c) and FR-13.1 (case c) cannot run at all (the MX320 cannot produce those stimuli on demand) — so the Phase 3 exit cannot close until OD-4 is settled with a sink, or those contracts are amended.
 related_test_baseline: testing/test-plan.yaml
 ```
 
