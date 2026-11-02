@@ -15,8 +15,13 @@ dut:
   flash: 8MB              # FSD NFR-2.2
   psram: 8MB octal        # FSD NFR-2.3
   console: UART0 GPIO43/44 via a USB-UART adapter on a bench slot (FSD NFR-2.4)
-  slot: null              # assigned by /commission; tests find the DUT by MAC
-  mac: null               # recorded by /commission
+  slot: SLOT3             # UART console (FT232R 0403:6001, /dev/ttyUSB0); tests find the DUT by MAC
+  mac: dc:da:0c:57:57:a0  # POST /api/chip/info 2026-11-02 (SLOT4, native USB)
+  observed: >-
+    2026-11-02 /api/chip/info: ESP32-S3 (QFN56) rev v0.2, flash 8MB (GD c8/4017,
+    quad eFuse, run as DIO), embedded PSRAM 8MB (octal_psram: 64 Mbit, gen 3),
+    40 MHz crystal. Matches FSD NFR-2.1-2.3.
+  temporary_flash_slot: SLOT4  # XIAO USB-C still on the Pi (303a:1001) until dut-boot-en is proven; then it moves to the hub
 testbench:
   # Dated observation, not an address to hard-code: tests take TESTBENCH_URL
   # from the environment.
@@ -24,7 +29,7 @@ testbench:
   last_seen_ip: 192.168.8.70
   url: http://192.168.8.70:8080
   harness_ref: db6a093    # Embedded-AI-Harness commit pinned in .devcontainer/Dockerfile
-  last_seen: 2026-11-01   # GET /api/info
+  last_seen: 2026-11-02   # GET /api/info; /api/wifi/mode = wifi-testing
 
 capabilities:
   # --- Bench capabilities: declared by the testbench (Harness-FSD Appendix D)
@@ -107,10 +112,22 @@ capabilities:
   # testing/debugging-agenda.md; /commission flips it to yes (or records no
   # with its consequence).
   dut-on-slot:
-    what: The XIAO ESP32-S3 sits on a bench slot through a USB-UART adapter on D6/D7, accepts a flash at flash_args offsets, and its UART console is readable
-    available: unproven
+    what: The XIAO ESP32-S3 sits on a bench slot through a USB-UART adapter on D6/D7, a CI artefact flashed at its flash_args offsets boots, and its UART console is readable
+    available: yes
+    observed: >-
+      2026-11-02 CI run 41478532668 (Build Firmware, main @ 6670ffb), artefact
+      firmware-6670ffb/coldflash flashed via POST /api/flash at flash_args offsets
+      0x0 bootloader, 0x8000 partition-table, 0xf000 ota_data_initial,
+      0x20000 mx320-printserver.bin (hash verified). After a reset, SLOT3 UART at
+      115200 showed `App version: 6670ffb`, `GPIO 44 and 43 are used as console UART
+      I/O pins`, `Found 8MB PSRAM device`, `main: Init complete`.
+    limitation: >-
+      The flash went over the XIAO's USB-C on SLOT4: the adapter cannot enter
+      download mode until BOOT/EN are wired (esptool on SLOT3: "No serial data
+      received"). Consequence: flashing through the adapter is proven under
+      dut-boot-en; until then the USB-C cannot move to the printer hub.
   dut-boot-en:
-    what: Bench GPIO18/17 drive the XIAO's GPIO0 (BOOT) and EN — download mode, reset, and the 10 s factory-reset hold (FR-2.17)
+    what: Bench GPIO18/17 drive the XIAO's GPIO0 (BOOT) and EN — download mode (flashing through the adapter on SLOT3), reset, and the 10 s factory-reset hold (FR-2.17)
     available: unproven
   usb-host-hub-power:
     what: With the XIAO on the active hub's upstream port, the hub enables its downstream ports and the ESP sees devices attach (FSD R1)
@@ -170,7 +187,7 @@ tests:
     tier: bench
     verifies: [NFR-2.4, FR-20.1]
     needs: [bench-flash, bench-serial-reset, bench-serial-monitor, dut-on-slot]
-    observable: flash (with erase) ok at flash_args offsets; after reset UART shows `boot: fw=<expected version>` then `state: PROVISIONING`
+    observable: 'flash (with erase) ok at flash_args offsets; after reset UART shows `boot: fw=<expected version>` then `state: PROVISIONING`'
     impl: null
     status: not done
     reason: test not written
@@ -196,7 +213,7 @@ tests:
     tier: bench
     verifies: [FR-2.11, FR-2.12]
     needs: [bench-serial-monitor, home-wlan]
-    observable: UART `wifi: got ip <ip>`; GET http://<ip>/api/status from the devcontainer returns `state: OPERATIONAL`
+    observable: 'UART `wifi: got ip <ip>`; GET http://<ip>/api/status from the devcontainer returns `state: OPERATIONAL`'
     impl: null
     status: not done
     reason: test not written
@@ -209,7 +226,7 @@ tests:
     tier: bench
     verifies: [FR-8.1, FR-8.2, FR-8.9]
     needs: [usb-host-hub-power, printer-mx320]
-    observable: /api/status `printer.present: true`, `mdl` = the MX320's 1284 MDL (expected "MX320 series"), `status: ready`
+    observable: '/api/status `printer.present: true`, `mdl` = the MX320''s 1284 MDL (expected "MX320 series"), `status: ready`'
     impl: null
     status: not done
     reason: test not written
@@ -235,7 +252,7 @@ tests:
     tier: bench
     verifies: [FR-9.1, FR-6.1, FR-6.4, FR-6.9]
     needs: [mx320-job-file, operator, bench-operator-prompt]
-    observable: job file sent to <ip>:9100 and closed; log `job: done bytes=<file size>`; /api/status job.completed +1; operator confirms the known page printed
+    observable: 'job file sent to <ip>:9100 and closed; log `job: done bytes=<file size>`; /api/status job.completed +1; operator confirms the known page printed'
     impl: null
     status: not done
     reason: test not written
