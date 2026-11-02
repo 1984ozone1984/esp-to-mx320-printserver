@@ -43,7 +43,7 @@ capabilities:
       (images flashed at 40 MHz). Consequence: none for correctness; boot timing may
       differ from a USB-flashed unit.
   bench-flash-read:
-    what: Read a flash region back with its SHA-256 through POST /api/flash/read — FSD §25.0 "slot read"; resets the DUT
+    what: Read a flash region back with its SHA-256 through POST /api/flash/read; resets the DUT. Unusable over the UART slot (no BOOT/EN); FSD §25.0 slot read is GET /api/slots instead
     available: yes
   bench-chip-info:
     what: Read chip, flash size and MAC through POST /api/chip/info — FSD §25.0 "chip read"; resets the DUT
@@ -166,6 +166,9 @@ capabilities:
   ha-broker:
     what: The Home Assistant MQTT broker, reachable from the home WLAN and from the devcontainer (MQTT_HOST/USER/PASS in host env)
     available: unproven
+  usb-test-peripherals:
+    what: A second USB hub (cascade for NFR-2.7) and a USB flash drive (FR-8.5, FR-8.8) on the product hub
+    available: unproven
   dut-power-cycle:
     what: Power the DUT off and on as FSD §2.2 defines — operator disconnects the hub's 5 V supply on a bench prompt; the UART adapter is not a power path to the XIAO
     available: unproven
@@ -192,7 +195,7 @@ tests:
     phase: 1
     tier: bench
     verifies: [NFR-2.4, FR-20.1]
-    needs: [bench-flash, bench-operator-prompt, operator, bench-serial-monitor, dut-on-slot]
+    needs: [bench-flash, bench-operator-prompt, operator, bench-serial-monitor, dut-on-slot, dut-power-cycle]
     observable: 'bench cold flash (FSD §2.2: operator moves USB-C to the Pi), with erase, ok at flash_args offsets; after the operator power-cycles, UART shows `boot: fw=<expected version>` then `state: PROVISIONING`'
     impl: null
     status: not done

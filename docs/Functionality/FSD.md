@@ -83,12 +83,14 @@ testbench UDP log (§20).
 **Bench cold flash** — the only way to write the bootloader, partition table or
 an erased flash, used for the first flash, recovery from an image that cannot
 reach the network, and contracts whose precondition is a release build on
-erased NVS: an operator, prompted through `/api/human-interaction`, unplugs the
-XIAO's USB-C from the hub's upstream port and plugs it into the Pi **while
-holding BOOT**, releasing it once plugged in — the chip starts in ROM download
+erased NVS: an operator, prompted through `/api/human-interaction`, first
+disconnects the hub's 5 V supply wherever it feeds the XIAO (so the XIAO is
+unpowered and the hub's 5 V never meets the Pi's VBUS), unplugs the XIAO's
+USB-C from the hub's upstream port and plugs it into the Pi **while holding
+BOOT**, releasing it once plugged in — the chip starts in ROM download
 mode (R7), which works whatever the installed firmware does with the USB PHY;
 the testbench flashes through that native-USB slot (with erase where the
-contract says so) and resets the chip; the operator moves the cable back. The MX320 is absent from the ESP during it.
+contract says so) and resets the chip; the operator moves the cable back and reconnects the hub's 5 V. The MX320 is absent from the ESP during it.
 
 Platform constraints — each one a number the build reads (§23 binds them to
 build settings):
@@ -108,8 +110,8 @@ Every NFR-2.x constraint below is **[Must]**.
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | NFR-2.1–2.3 | Chip read (§25.0) during a bench cold flash; then reset | Chip ESP32-S3, flash 8 MB; `boot:` marker with `flash=8 psram=8` | `psram=0` | bench (commissioning) |
-| NFR-2.4 | Reset DUT, read UART adapter | Boot banner at 115200 on GPIO43 | Banner only on USB-Serial/JTAG | bench |
-| NFR-2.5 | Attach printer to USB-C via hub | FR-8.1 passes | Console output on the USB-C port | bench |
+| NFR-2.4 | Reset DUT, read UART adapter | Boot banner at 115200 on GPIO43 | No banner on the UART adapter within 5 s of the `boot:` marker's expected time (reset sent) | bench |
+| NFR-2.5 | Attach printer to USB-C via hub | FR-8.1 passes; console lines keep arriving on the UART adapter | Printer not claimed; DUT reboot on attach | bench |
 | NFR-2.6 | Running · operator holds BOOT (§25.0 button press) for about 12 s | `button: held <ms> ms` with ms ≥ 10000, then `reset: factory` (FR-2.17) | `reset: factory` without a preceding `button: held` line | bench |
 | NFR-2.7 | Printer behind two cascaded hubs | Printer not claimed; log `usb: hub depth exceeded` | Crash | bench |
 
@@ -117,8 +119,11 @@ Power: the XIAO and the hub are supplied by the hub's 5 V supply; the ESP32
 cannot source USB VBUS. How VBUS reaches the hub's upstream port is a
 commissioning question (§4, R1). **Bench power-off of the DUT** (the stimulus
 "power off DUT" / "power-cycle" in any contract) means: an operator, prompted
-through `/api/human-interaction`, disconnects the hub's 5 V supply and, for a
-power-cycle, reconnects it after 5 s. The MX320 keeps its own mains supply.
+through `/api/human-interaction`, removes the XIAO's only 5 V source and, for a
+power-cycle, restores it after 5 s. That source is the hub's 5 V supply once
+the product wiring is in place (Phase 2 on); while the XIAO's USB-C is still on
+the Pi (Phase 1, §3.1), it is that USB-C cable, unplugged and re-plugged. The
+MX320 keeps its own mains supply.
 The UART adapter stays powered from the bench and is not a power path to the
 XIAO (capability `dut-power-cycle`).
 
@@ -218,7 +223,7 @@ verification:
     - For CONNECTING, OPERATIONAL and WIFI_RECOVERY: WiFi credentials, admin password and MQTT settings stored (portal or /settings), DUT in that state.
     - For PROVISIONING: NVS erased (no credentials can exist in this state), DUT in PROVISIONING.
   stimulus:
-    - Operator holds BOOT for about 12 s (§25.0 button press; `button: held <ms> ms` must show ≥ 10000, else the run is repeated) — once from each source state: PROVISIONING, CONNECTING (bench AP stopped), OPERATIONAL, WIFI_RECOVERY (AP disabled after OPERATIONAL); re-provision between runs.
+    - Operator holds BOOT for about 12 s (§25.0 button press; `button: held <ms> ms` must show ≥ 10000, else the run is repeated) — once from each source state: PROVISIONING, CONNECTING (bench AP stopped), OPERATIONAL, WIFI_RECOVERY (AP disabled after OPERATIONAL); restore credentials with `cred` (test build, FR-19.1) between runs.
   expected_observations:
     - Log marker `reset: factory` then a reboot.
     - After reboot the setup SoftAP `MX320-Setup-<id>` is visible within 10 s.
@@ -235,13 +240,13 @@ verification:
     - Reset fires on a hold whose `button: held` line shows < 10000 ms (see FR-2.19).
   tier: bench
   evidence: [operator prompt answers, UART log with `button: held`, SoftAP scan, /api/status]
-  cleanup: [Re-provision DUT via portal (P-PROVISION)]
+  cleanup: [Restore bench-AP credentials with `cred` (FR-19.1) and `reboot`]
 ```
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.4.1/`, following redirects, ends in 200 with the setup page ≤ 10 s after reset | DUT joins any other network | bench |
-| FR-2.11 | Credentials stored (FR-19.1 or portal) · reset | Log `state: CONNECTING` ≤ 2 s after reset | SoftAP started | target |
+| FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.4.1/`, following redirects, ends in 200 with the setup page ≤ 10 s after the `boot:` marker | DUT joins any other network | bench |
+| FR-2.11 | Credentials stored (FR-19.1 or portal) · reset | Log `state: CONNECTING` ≤ 2 s after the `boot:` marker | SoftAP started | bench |
 | FR-2.12 | Credentials stored, AP up; for the Phase 4 exit also printer present and broker configured · reset | Each ≤ 5 s after `wifi: got ip`: `/api/status` 200; mDNS A answer; TCP :9100 accepts; retained `online` on the broker (Phase 1 exit: `/api/status` only) | A service answering before `wifi: got ip` | bench |
 | FR-2.13 | Credentials for the bench AP stored · reset with (a) the bench AP stopped, (b) the bench AP up with a different password | For 5 min: successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | SoftAP started; reboot | bench |
 | FR-2.14 | Job in progress · AP disabled | UART `state: WIFI_RECOVERY` and `job: abort id=<n> reason=wifi` ≤ 2 s after the `wifi: lost` marker | DUT reboots; job later reported DONE | bench |
@@ -646,7 +651,7 @@ verification:
 |---|---|---|---|---|
 | FR-11.1 | GET / | 200, HTML containing the six fields | Password values present | bench |
 | FR-11.2 | GET /api/status | Valid against Appendix B schema; ≤ 2 s | Missing required key | host (serializer) + bench |
-| FR-11.10 | (a) Bench cold flash with erase of test image X, then `cred` (FR-19.1) and `reboot` (FR-19.5) to reach OPERATIONAL: GET; (b) then OTA image Y (FR-11.3) without reboot: GET | (a) `running` = `ota_0`; `ota_0_sha256` = SHA-256 of X padded with 0xFF to 0x300000; `ota_1_sha256` = SHA-256 of 0x300000 bytes of 0xFF. (b) `ota_1_sha256` differs from (a); `ota_0_sha256` unchanged; each answer ≤ 5 s | A hash equal to its value before (b) for the slot just written; auth demanded |
+| FR-11.10 | (a) Bench cold flash with erase of test image X, then `cred` (FR-19.1) and `reboot` (FR-19.5) to reach OPERATIONAL: GET; (b) then OTA image Y (FR-11.3), GET after its reboot | (a) `running` = `ota_0`; `ota_0_sha256` = SHA-256 of X padded with 0xFF to 0x300000; `ota_1_sha256` = SHA-256 of 0x300000 bytes of 0xFF. (b) `running` = `ota_1`; `ota_1_sha256` differs from (a); `ota_0_sha256` unchanged; each answer ≤ 5 s | A hash equal to its value before (b) for the slot just written; auth demanded | bench |
 | FR-11.4 | POST image, no / wrong auth | 401; SHA-256 of `ota_0` and `ota_1` (slot read, §25.0) unchanged | Flash write | bench |
 | FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical; inactive-slot SHA-256 (slot read, §25.0) unchanged | Reboot mid-job; inactive slot written | bench |
 | FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) a valid ESP32-S3 image (magic 0xE9, ESP32-S3 chip ID) padded to 3 145 729 bytes (0x300001), so only its size is wrong | 400; no reboot; version unchanged | Boot into partial image | bench |
@@ -688,7 +693,7 @@ verification:
 | FR-12.8 | Submit all fields (manual SSID = home WLAN, where the HA broker is reachable; hostname `mx320-test`, MQTT host/port/user/password) | After provisioning, `/api/status` `config.hostname`/`mqtt_host`/`mqtt_port`/`mqtt_user` equal the submitted values; GET /settings with the submitted admin password returns 200; with the broker requiring that MQTT user/password (HA broker), `mqtt.connected: true` ≤ 30 s | A submitted field silently dropped; `mqtt.connected: false` with the right password | bench |
 | FR-12.3 | Submit bench SSID with wrong password | Error shown ≤ 20 s; still PROVISIONING; NVS has no creds after reboot | Credentials persisted | bench |
 | FR-12.4 | Submit, one invalid field at a time: SSID empty / 33 bytes; WiFi password 7 / 64 chars; admin password 7 / 65 chars; hostname `bad host!` / 33 chars / `-x` / `x-`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars | Each rejected with an error naming its field; nothing persisted | Any of them accepted or persisted | host (validator) + bench |
-| FR-12.5 | OPERATIONAL · scan from bench | No `MX320-Setup-*` SSID | SoftAP visible | bench |
+| FR-12.5 | OPERATIONAL on the home WLAN, bench AP stopped · scan from bench | No `MX320-Setup-*` SSID | SoftAP visible | bench |
 | FR-12.6 | Known WiFi and admin passwords · capture every portal response: the setup page before submit, the error response to an invalid submit, the response to a failed test-join, the success response, and the setup page fetched again after each | Password fields empty in every capture | Either password value in any capture | bench |
 | FR-12.7 | `strings` on release image | Bench SSID/password absent | Present | other (CI) |
 
@@ -1144,7 +1149,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.20
+fsd_version: 0.1.21
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1175,6 +1180,7 @@ change_history:
   - 0.1.18 2026-11-02 Load-defined round 16 (OPEN; minor fixes): OD-4 gate list and Phase 4 consequence; attach/detach instant and portal client defined (§25.0); FR-2.19 single obligation; FR-2.17 forbids any rejoin; FR-2.18 scan with bench AP stopped
   - 0.1.19 2026-11-02 Change request (user): no BOOT/EN wiring. Bench topology without control lines; bench cold flash defined (§2.2); updates by OTA; test-build `reboot`/`wipe` (FR-19.5–19.8); BOOT presses by operator observed through `button: held`; §25.0 defines bench reset, NVS erased, button press
   - 0.1.20 2026-11-02 Load-defined round 17: slot read via `GET /api/slots` (FR-11.10); chip read during cold flash; cold flash enters ROM download mode with BOOT held; FR-2.17 evidence/tolerance, FR-19.2 prohibition, §4/§24 flashing text, NFR-17.1 cleanup; OD-6 bench AP + station
+  - 0.1.21 2026-11-02 Load-defined round 18: power-cycle defined for Phase 1 (USB-C on the Pi); cold flash disconnects hub 5 V first; FR-2.10/2.11 timed from `boot:`; FR-11.10 tier and post-OTA reboot; FR-2.17 restores credentials by `cred`; FR-12.5 on the home WLAN; NFR-2.4/2.5 observable prohibitions
 superseded_requirements: []
 open_decisions:
   - id: OD-3
