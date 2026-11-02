@@ -72,7 +72,9 @@ capabilities:
     limitation: >-
       Embedded-AI-Harness#56 — TestbenchDriver.enter_portal() does not match
       /api/enter-portal. Consequence: provisioning uses sta_join + /api/wifi/http
-      directly (procedure P-PROVISION).
+      directly (procedure P-PROVISION). Running this station while the bench AP is
+      up is not declared by the bench. Consequence: FR-2.18, FR-12.2 and FR-12.3
+      stay blocked until the bench declares it or the FSD amends their stimulus.
   bench-wifi-scan:
     what: WiFi scan from the bench radio (GET /api/wifi/scan)
     available: yes
@@ -252,7 +254,7 @@ tests:
     reason: test not written
 
 gates:
-  load-defined:       {verdict: SHUT, date: 2026-11-02, commit: dfafcb6}   # fresh checker round 15 (0 blocking, 5 minor); rounds 1-14 SHUT
+  load-defined:       {verdict: OPEN, date: 2026-11-02, commit: a79959a}   # fresh checker round 16 (0 blocking, 5 minor, fixed after per gate rule); rounds 1-15 SHUT
   ai-harnessed:       {verdict: SHUT, date: 2026-11-01, commit: 6587fb1}   # fresh checker round 2: load-defined verdict unrecorded; round 1 SHUT at cdb85f1 (release-verification declared yes)
   dut-ready:          {verdict: null, date: null, commit: null}
   ready-for-shipment: {verdict: null, date: null, commit: null}
