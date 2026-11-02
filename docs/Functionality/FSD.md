@@ -161,7 +161,7 @@ Transition table — **the table is normative; every row is a requirement**
 | FR-2.15 | `WIFI_RECOVERY` | got IPv4 | — | `OPERATIONAL` | Restart services as FR-2.12 | RAW port accepting ≤ 30 s after AP returns | `[derived]` |
 | FR-2.16 | `WIFI_RECOVERY` | connect fails | — | `WIFI_RECOVERY` | Retry, backoff as FR-2.13 | ceiling 60 s | `[user]` (OD-2) |
 | FR-2.17 | any but `BOOT` | BOOT held ≥ 10 s | — | `FACTORY_RESET` | Erase user config (§19), reboot | erase at threshold; reboot ≤ 3 s after BOOT released | `[pack:esp32]` |
-| FR-2.20 | `OPERATIONAL` | IP lost, link up | — | `WIFI_RECOVERY` | Abort active job (§6) | ≤ 2 s | `[derived]` |
+| FR-2.20 | `OPERATIONAL` | IP lost, link up | — | `WIFI_RECOVERY` | Abort active job (§6) | — (decided by the lifecycle function; FR-2.14 times the same abort on the bench) | `[derived]` |
 | FR-2.18 | `PROVISIONING` | valid form submitted and STA test-join succeeds | — | `CONNECTING` | Persist config, stop SoftAP | ≤ 5 s after test-join | `[derived]` |
 
 Unhandled-event default: events not listed are logged at debug level and
@@ -227,7 +227,7 @@ verification:
   expected_observations:
     - Log marker `reset: factory` then a reboot.
     - After reboot the setup SoftAP `MX320-Setup-<id>` is visible within 10 s.
-    - GET http://192.168.4.1/api/status shows `configured: false` and `state: PROVISIONING`.
+    - GET http://192.168.71.1/api/status shows `configured: false` and `state: PROVISIONING`.
     - `boot_count` equals its value before the reset plus 1 (retained per §19).
     - For the three provisioned source states: after re-provisioning with WiFi credentials and a new admin password different from the old one (no MQTT fields), `config.mqtt_host` and `config.mqtt_user` are empty, `config.mqtt_port` = 1883, `config.hostname` = `mx320-<id>`, and `POST /api/ota` with the old admin password answers 401.
   timing: reboot ≤ 3 s after BOOT is released (never while BOOT is held, R7); the operator releases when answering the prompt
@@ -245,13 +245,13 @@ verification:
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.4.1/`, following redirects, ends in 200 with the setup page; SoftAP beacon in a bench scan ≤ 10 s after the `boot:` marker (the bench's own join and relay time is not counted) | DUT joins any other network | bench |
+| FR-2.10 | NVS erased · reset | SoftAP visible and `GET http://192.168.71.1/`, following redirects, ends in 200 with the setup page; SoftAP beacon in a bench scan ≤ 10 s after the `boot:` marker (the bench's own join and relay time is not counted) | DUT joins any other network | bench |
 | FR-2.11 | Credentials stored (FR-19.1 or portal) · reset | Log `state: CONNECTING` ≤ 2 s after the `boot:` marker | SoftAP started | bench |
 | FR-2.12 | Credentials stored, AP up; for the Phase 4 exit also printer present and broker configured · reset | Each ≤ 5 s after `wifi: got ip`: `/api/status` 200; mDNS A answer; TCP :9100 accepts; retained `online` on the broker (Phase 1 exit: `/api/status` only) | A service answering before `wifi: got ip` | bench |
 | FR-2.13 | Credentials for the bench AP stored · reset with (a) the bench AP stopped, (b) the bench AP up with a different password | For 5 min: successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | SoftAP started; reboot | bench |
 | FR-2.14 | Job in progress · AP disabled | UART `state: WIFI_RECOVERY` and `job: abort id=<n> reason=wifi` ≤ 2 s after the `wifi: lost` marker | DUT reboots; job later reported DONE | bench |
-| FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | Successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | Reboot; SoftAP; a retry earlier than n s | bench |
-| FR-2.18 | PROVISIONING · submit valid form for the bench AP | `state: CONNECTING` ≤ 5 s after `portal: test-join ok`; then, with the bench AP stopped (state is no longer PROVISIONING, so no SoftAP may return), the setup SSID absent from a bench scan | Credentials persisted before test-join succeeded | bench |
+| FR-2.16 | WIFI_RECOVERY, AP kept off 5 min | Successive `wifi: retry in <n> s` lines carry n = 1, 2, 4, …, 60, 60; each next `wifi: connecting` follows its retry line after n s (±20 %) | Reboot; SoftAP; a retry earlier than 0.8 × n s | bench |
+| FR-2.18 | PROVISIONING · submit valid form for the bench AP | `state: CONNECTING` ≤ 5 s after `portal: test-join ok`; then, with the bench AP stopped (state is no longer PROVISIONING, so no SoftAP may return), the setup SSID absent from a bench scan | `state: CONNECTING` before `portal: test-join ok` | bench |
 | FR-2.20 | Feed `IP_LOST` to the lifecycle function in OPERATIONAL with a job active (the bench cannot revoke a DHCP lease) | Next state WIFI_RECOVERY; action abort job | Any other next state | host |
 | FR-2.19 | In each of PROVISIONING (NVS erased), CONNECTING (credentials stored, bench AP stopped), OPERATIONAL, WIFI_RECOVERY (bench AP disabled after OPERATIONAL) · operator holds BOOT for about 7 s (§25.0 button press; `button: held` must show < 10000 ms, else repeat) | No state change; config unchanged; no reboot | `reset: factory` logged | bench |
 
@@ -475,7 +475,7 @@ verification:
 | FR-6.9 | Run 2 complete jobs | `job.completed` +2 | Count changes on an aborted job | bench |
 | FR-6.11 | Abort 1 job (client RST) | `job.aborted` +1 | `job.completed` changes | bench |
 | FR-6.12 | Complete a 123 456-byte job | `job.last_bytes` = 123456 | Value from an aborted job | bench |
-| FR-6.13 | Send job, half-close (client FIN) | Client receives the device's FIN ≤ 1 s after sending its own (both timed on the client's clock); `job: done` logged | Connection left half-open > 1 s | bench |
+| FR-6.13 | Printer idle · send a 1 KiB job, half-close (client FIN) | Client receives the device's FIN ≤ 2 s after sending its own (a 1 KiB job reaches DONE well inside 1 s; + 1 s FR-6.13) (both timed on the client's clock); `job: done` logged | Connection left half-open > 1 s | bench |
 | NFR-6.1 | Sink at full speed · 10 MiB job | Throughput ≥ 300 KiB/s client-measured over the whole job | Sink receives fewer bytes than sent | bench |
 
 ## 7. Printer Status Derivation
@@ -503,7 +503,7 @@ printer status reported by §11 and §13.
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | FR-7.1 | Feed every bit combination + absent + unreadable | Table output for each | Two states for one input | host |
-| FR-7.2 | Printer claimed · (a) idle: remove paper (MX320) or set sink port status paper-out; (b) during a streaming job: set sink port status paper-out | `/api/status` shows `paper_out` ≤ 5 s in both (MX320 subject to R3) | Status stale > 5 s | bench |
+| FR-7.2 | Printer claimed · (a) idle: remove paper (MX320) or set sink port status paper-out; (b) during a streaming job: set sink port status paper-out | `/api/status` shows `paper_out` ≤ 6 s in both (5 s refresh + 1 s read; MX320 subject to R3) | Status stale > 6 s | bench |
 | FR-7.3 | Start / end a job | `printing` true during, false ≤ 1 s after DONE | `printing` true while IDLE | bench |
 
 # Part B — Interfaces (L1)
@@ -587,7 +587,7 @@ querier on the LAN.
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| FR-10.1 | OPERATIONAL · `dns-sd -G v4 <hostname>.local` / avahi-resolve | Resolves to STA IP | Any other address (e.g. 192.168.4.1) | bench |
+| FR-10.1 | OPERATIONAL · `dns-sd -G v4 <hostname>.local` / avahi-resolve | Resolves to STA IP | Any other address (e.g. the SoftAP's 192.168.71.1) | bench |
 | FR-10.2 | Printer present · browse `_pdl-datastream._tcp` | Instance named `<MDL> @ <hostname>` found with exact TXT keys/values; TXT-builder unit test passes | Other instance name; missing key; port ≠ 9100 | host + bench |
 | FR-10.3 | Detach printer | Service removed from browse ≤ 5 s after the `usb: printer absent` marker | Service lingers | bench |
 | FR-10.4 | Browse `_http._tcp` | Instance on port 80 | Port ≠ 80; instance missing | bench |
@@ -656,17 +656,18 @@ verification:
 | FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical; inactive-slot SHA-256 (slot read, §25.0) unchanged | Reboot mid-job; inactive slot written | bench |
 | FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) a valid ESP32-S3 image (magic 0xE9, ESP32-S3 chip ID) padded to 3 145 729 bytes (0x300001), so only its size is wrong | 400; no reboot; version unchanged | Boot into partial image | bench |
 | FR-11.7 | GET /settings and POST /settings, each without auth | Both 401; `/api/status` `config.*` unchanged | Settings page served; any field persisted | bench |
-| FR-11.9 | DUT on the home WLAN (HA broker reachable), valid credentials · POST hostname `mx320-new`, MQTT host/port/user/password of the HA broker, admin_pass `newpass12`; then reset | 200; at once: `config.mqtt_*` show the new values, the old admin password gets 401 and `newpass12` 200; after the reset: `config.hostname` = `mx320-new`, `mx320-new.local` resolves, `mqtt.connected: true` ≤ 30 s after `wifi: got ip` | A submitted field not persisted; admin change waiting for a reboot | bench |
+| FR-11.9 | DUT on the home WLAN (HA broker reachable), valid credentials · POST hostname `mx320-new`, MQTT host/port/user/password of the HA broker, admin_pass `newpass12`; then reset | 200; at once: `config.mqtt_*` show the new values, on `GET /settings` the old admin password gets 401 and `newpass12` 200; after the reset: `config.hostname` = `mx320-new`, `mx320-new.local` resolves, `mqtt.connected: true` ≤ 30 s after `wifi: got ip` | A submitted field not persisted; admin change waiting for a reboot | bench |
 | FR-11.8 | Valid credentials · POST one invalid field at a time together with one valid change to another field (MQTT port 1884; hostname `mx320-new` when the port is under test): hostname `bad host!` / 33 chars / `-x` / `x-`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars; admin_pass 7 / 65 chars | Each 400 naming the field; the valid companion field still holds its old value in `config.*` | Partial persist; any invalid value accepted | host (validator) + bench |
 
 ## 12. Captive Portal
 
 **Purpose & peer.** First-time WiFi setup from a phone or laptop while in
 `PROVISIONING`. SoftAP SSID `MX320-Setup-<id>` (id per §18), open, IP
-192.168.4.1; DNS catch-all answers every name with 192.168.4.1.
+192.168.71.1/24 (kept off the testbench AP's 192.168.4.0/24); DNS catch-all
+answers every name with 192.168.71.1.
 
 - **FR-12.1** [Must] `[user]`: In `PROVISIONING`, an HTTP GET via the SoftAP to
-  any host and path other than `http://192.168.4.1/api/status` shall return the
+  any host and path other than `http://192.168.71.1/api/status` shall return the
   setup page or a redirect to it (captive-portal detection on macOS, Windows,
   iOS, Android).
 - **FR-12.2** [Must] `[user]`: The setup page shall list the SSIDs found by a
@@ -695,7 +696,7 @@ verification:
 | FR-12.4 | Submit, one invalid field at a time: SSID empty / 33 bytes; WiFi password 7 / 64 chars; admin password 7 / 65 chars; hostname `bad host!` / 33 chars / `-x` / `x-`; mqtt_host `bad host!` / 65 chars; mqtt_port 0 / 65536; mqtt_user 65 chars; mqtt_pass 65 chars | Each rejected with an error naming its field; nothing persisted | Any of them accepted or persisted | host (validator) + bench |
 | FR-12.5 | OPERATIONAL on the home WLAN, bench AP stopped · scan from bench | No `MX320-Setup-*` SSID | SoftAP visible | bench |
 | FR-12.6 | Known WiFi and admin passwords · capture every portal response: the setup page before submit, the error response to an invalid submit, the response to a failed test-join, the success response, and the setup page fetched again after each | Password fields empty in every capture | Either password value in any capture | bench |
-| FR-12.7 | `strings` on release image | Bench SSID/password absent | Present | other (CI) |
+| FR-12.7 | `strings` on release image against the CI secret list (bench and home-WLAN SSIDs and passwords, admin and MQTT passwords) | None of them present; `wifi_ssid`/`wifi_pass` defaults empty | Any present | other (CI) |
 
 ## 13. MQTT / Home Assistant Publisher
 
@@ -711,8 +712,9 @@ disabled while the broker host setting is empty. Base topic
 - **FR-13.3** [Must] `[derived]`: On each broker connect the device shall
   publish `online` (retained) to `mx320/<id>/availability`.
 - **FR-13.7** [Must] `[derived]`: The device shall register `offline`
-  (retained) on `mx320/<id>/availability` as its MQTT last-will, with an MQTT
-  keepalive of 30 s.
+  (retained) on `mx320/<id>/availability` as its MQTT last-will.
+- **FR-13.8** [Must] `[user]`: The device shall connect to the broker with an
+  MQTT keep-alive of 30 s (OD-5).
 - **FR-13.4** [Should] `[pack:esp32]`: On each broker connect the device shall
   publish retained Home Assistant discovery configs under
   `homeassistant/<component>/mx320_<id>/<object>/config` for: printer state
@@ -747,10 +749,11 @@ verification:
 
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
-| FR-13.1 | Subscribed · (a) start a job, (b) complete it, (c) set the sink's port status to paper-out, (d) abort a job (client RST) | A new retained state ≤ 2 s after each: (a) `printing: true`, (b) `job.completed` +1, (c) `printer.status: paper_out`, (d) `job.aborted` +1 | Message without retain flag; a message still showing the previous value | bench |
+| FR-13.1 | Subscribed · (a) start a job, (b) complete a 1 KiB job, (c) set the sink's port status to paper-out, (d) abort a job (client RST) | A new retained state after each — (a), (d) ≤ 2 s after the client's connect / RST, (b) ≤ 3 s after the client's close, (c) ≤ 8 s after the sink change (≤ 6 s detection, FR-7.2, + 2 s): (a) `printing: true`, (b) `job.completed` +1, (c) `printer.status: paper_out`, (d) `job.aborted` +1 | Message without retain flag; a message still showing the previous value | bench |
 | FR-13.2 | Idle 3 min | ≥ 3 state messages | Gap > 70 s | bench |
 | FR-13.3 | Subscribe · (a) reset DUT; (b) restart a broker that keeps no persistence (bench broker) while the DUT runs | Retained `online` (a) ≤ 5 s after `wifi: got ip`, (b) ≤ 30 s after the broker restart | No retained flag; `online` missing after the broker restart | bench |
 | FR-13.7 | Power off DUT (§2.2 bench power-off) | Broker publishes retained `offline` ≤ 50 s after the power-off prompt answer (1.5 × keepalive after the DUT's last packet, MQTT 3.1.1 §3.1.2.10, ≤ 45 s, + 5 s operator allowance, §25.0) | Retained `online` still retained 50 s after the prompt answer | bench |
+| FR-13.8 | DUT on the home WLAN, `mqtt_host` set to an MQTT listener on the test host · reboot | The CONNECT packet the listener decodes carries Keep Alive = 30 | Keep Alive ≠ 30; CONNECT without a will (FR-13.7) | bench |
 | FR-13.4 | (a) DUT connects; (b) restart a broker that keeps no persistence while the DUT runs · read retained `homeassistant/#` after each | Five configs, schema-valid, same device block — (b) ≤ 30 s after the broker restart | Discovery for non-listed entities; configs missing after the broker restart | host (builder) + bench |
 | FR-13.6 | see FR-13.5 contract | — | — | bench |
 
@@ -1072,7 +1075,7 @@ test host reads the bench broker (subscriptions, retained topics) on the
 bench's LAN address, port 1883 — the same broker the DUT reaches as
 192.168.4.1:1883 (`bench-mqtt-broker`).
 
-**Portal client.** Contracts that use the setup portal (§12, FR-2.10,
+**Portal client.** The setup SoftAP may change channel when a test-join starts (Appendix A); the bench station re-joins the setup SSID if dropped, and re-join time is not counted in a portal contract's deadline. Contracts that use the setup portal (§12, FR-2.10,
 FR-2.18) reach it through the bench station (`/api/wifi/sta_join` to the setup
 SSID, then `/api/wifi/http`); where a contract also needs the bench AP up, the
 bench must hold its AP and that station at once — a bench capability the
@@ -1112,7 +1115,7 @@ requirement IDs in these chapters and the entries in `testing/test-plan.yaml`.
 | RAW port | TCP 9100 |
 | HTTP port | 80 |
 | mDNS services | `_pdl-datastream._tcp`, `_http._tcp` |
-| SoftAP | SSID `MX320-Setup-<id>`, open, 192.168.4.1/24, channel 1 |
+| SoftAP | SSID `MX320-Setup-<id>`, open, 192.168.71.1/24, channel 1 until a test-join moves it to the target AP's channel (single radio) |
 | UDP log | `<udp_log_host>:5555` |
 | MQTT base | `mx320/<id>` |
 | MQTT keepalive | 30 s |
@@ -1160,7 +1163,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.24
+fsd_version: 0.1.25
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1195,13 +1198,14 @@ change_history:
   - 0.1.22 2026-11-02 Load-defined round 19: OD-7 raw TCP to the bench-AP network; §25.0 Bench-AP client; Phase 1 cold-flash variant; FR-11.10 sets admin; NFR-2.4 anchor; FR-6.13 timed on the client clock; FR-2.10 bench join time excluded
   - 0.1.23 2026-11-02 Load-defined round 20: test host reads the bench broker on the bench LAN address; operator-act instant generalised; FR-13.7 lower bound; OD-3 consequence; FR-13.6 in OD-4/OD-7; OD-6 covers relay DNS (FR-12.1); FR-2.17 preconditions and restore steps
   - 0.1.24 2026-11-02 Load-defined round 21: FR-13.7 bound from the prompt answer, no lower bound; factory-reset reboot waits for BOOT release (R7); operator-act upper bounds + 5 s; FR-11.10 release-build case; FR-20.2 excludes link-down markers; OD-3 gates AT-4; NFR-17.1 prohibition moved to NFR-17.6
+  - 0.1.25 2026-11-02 Load-defined round 22: setup SoftAP moved to 192.168.71.1/24 (off the bench AP subnet); FR-13.1 per-case anchors and 8 s paper-out; FR-7.2 6 s; keep-alive split out as FR-13.8 with a CONNECT-decoding contract; FR-6.13 1 KiB job; FR-2.16, FR-2.18, FR-2.20, FR-11.9, FR-12.7 contract fixes; portal client re-join on channel change; OD-3/OD-4 Phase 2 consequence
 superseded_requirements: []
 open_decisions:
   - id: OD-3
     gates: [FR-7.1, FR-7.2, AT-4]
-    text: R3 — whether the MX320 maintains 1284 port-status bits; resolved at commissioning. If the bits are static, FR-7.1 states degrade to present/absent and FR-7.2 is amended; until then FR-7.2 (idle case a) closes only through the sink alternative its contract allows (OD-4), and AT-4 (paper-out in HA with the real MX320, Phase 4 exit) cannot close.
+    text: R3 — whether the MX320 maintains 1284 port-status bits; resolved at commissioning. If the bits are static, FR-7.1 states degrade to present/absent and FR-7.2 is amended; until then FR-7.2 (idle case a) closes only through the sink alternative its contract allows (OD-4) — so the Phase 2 exit cannot close while both R3 and the sink are open — and AT-4 (paper-out in HA with the real MX320, Phase 4 exit) cannot close.
   - id: OD-4
-    gates: [FR-2.15, FR-6.1–FR-6.6, FR-6.8, FR-6.10, NFR-6.1, FR-7.2 (case b), FR-8.6, FR-11.5, FR-13.1 (case c), FR-13.5, FR-13.6, NFR-17.2]
+    gates: [FR-2.15, FR-6.1–FR-6.6, FR-6.8, FR-6.10, NFR-6.1, FR-7.2 (case b; case a when R3 finds static bits), FR-8.6, FR-11.5, FR-13.1 (case c), FR-13.5, FR-13.6, NFR-17.2]
     text: Availability of a USB printer-class sink on the bench (A3). Without it the byte-exact contracts run against the real MX320 and lose byte-exactness, and FR-7.2 (case b), FR-8.6 (a–c) and FR-13.1 (case c) cannot run at all (the MX320 cannot produce those stimuli on demand) — so neither the Phase 3 exit nor the Phase 4 exit (FR-13.1 case c, FR-13.5) can close until OD-4 is settled with a sink, or those contracts are amended.
   - id: OD-7
     gates: [FR-2.14, FR-2.15, FR-13.5, FR-13.6, "FR-20.1 (`job: abort … reason=wifi` row)"]
