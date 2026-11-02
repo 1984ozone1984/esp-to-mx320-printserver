@@ -4,7 +4,9 @@
     "remoteUser": "dev",
     "containerEnv": {
         "TESTBENCH_URL": "http://192.168.8.70:8080",
-        "GH_RUNNER_PAT": "${localEnv:GH_RUNNER_PAT}"
+        "GH_RUNNER_PAT": "${localEnv:GH_RUNNER_PAT}",
+        "HOME_WIFI_SSID": "${localEnv:HOME_WIFI_SSID}",
+        "HOME_WIFI_PASS": "${localEnv:HOME_WIFI_PASS}"
     },
     "postStartCommand": "bash .devcontainer/runner/start.sh",
     "customizations": {
