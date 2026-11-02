@@ -89,6 +89,15 @@ restates the rules it sits next to, and two documents drift.
   failure claims you learned something, and with a broken baseline you did not.
 - **Leave the rig as you found it** — a fault left set corrupts every later test.
 
+## P-BASELINE — Phase 1 baseline for every bench test
+
+**Needs** test build running, UART console (SLOT3), home WLAN credentials
+(`HOME_WIFI_SSID`/`HOME_WIFI_PASS`). **Steps** write `wipe`; wait for
+`state: PROVISIONING`; write `cred <home SSID> <pass>` and `admin <test
+password>`; write `reboot`; wait for `wifi: got ip <ip>`. **After** GET
+`http://<ip>/api/status` answers `state: OPERATIONAL`. A test that changes
+credentials, slots or the running image restores this baseline afterwards.
+
 ## P-PROVISION — DUT provisioned on the bench AP
 
 **Needs** testbench WiFi AP, DUT in `PROVISIONING`. **Before** confirm SoftAP
