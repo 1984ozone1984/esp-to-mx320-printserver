@@ -78,13 +78,13 @@ capabilities:
       Embedded-AI-Harness#56 — TestbenchDriver.enter_portal() does not match
       /api/enter-portal. Consequence: provisioning uses sta_join + /api/wifi/http
       directly (procedure P-PROVISION). Running this station while the bench AP is
-      up is not declared by the bench. Consequence: FR-2.18, FR-12.2 and FR-12.3
+      up is not declared by the bench, nor is relay DNS through the DUT's catch-all (FSD OD-6). Consequence: FR-2.18, FR-12.1, FR-12.2 and FR-12.3
       stay blocked until the bench declares it or the FSD amends their stimulus.
   bench-ap-tcp:
     what: Raw TCP from the test host to a DUT on the bench AP (192.168.4.0/24) — RAW :9100 jobs during AP toggling (FSD OD-7)
     available: no
     consequence: >-
-      Embedded-AI-Harness#65 (routed path requested). The bench relays HTTP only (/api/wifi/http). FR-2.14, FR-2.15, FR-13.5 and the
+      Embedded-AI-Harness#65 (routed path requested). The bench relays HTTP only (/api/wifi/http). FR-2.14, FR-2.15 and the
       `job: abort … reason=wifi` marker are blocked until a testbench change request
       adds a TCP relay or a routed path.
   bench-wifi-scan:
@@ -288,7 +288,7 @@ tests:
     reason: test not written
 
 gates:
-  load-defined:       {verdict: OPEN, date: 2026-11-02, commit: a79959a}   # fresh checker round 16 (0 blocking, 5 minor, fixed after per gate rule); rounds 1-15 SHUT
+  load-defined:       {verdict: OPEN, date: 2026-11-02, commit: c7a60df}   # fresh checker round 23 (0 blocking, 7 minor, fixed after per gate rule); rounds 17-22 SHUT after the no-BOOT/EN change request; round 16 OPEN at a79959a
   ai-harnessed:       {verdict: OPEN, date: 2026-11-02, commit: f0e47bf}   # fresh checker round 3 (0 blocking, 6 minor, fixed after per gate rule); rounds 1-2 SHUT
   dut-ready:          {verdict: null, date: null, commit: null}
   ready-for-shipment: {verdict: null, date: null, commit: null}
