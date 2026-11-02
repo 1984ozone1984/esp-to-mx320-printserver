@@ -226,7 +226,13 @@ capabilities:
     available: unproven
     note: >-
       Runner installed in .devcontainer/ but not registered (an owner grant:
-      .devcontainer/runner/register.sh); repo variables TESTBENCH_URL and DUT_SLOT unset.
+      .devcontainer/runner/register.sh). Repo variables set 2026-11-02:
+      TESTBENCH_URL=http://192.168.8.70:8080, DUT_SLOT=SLOT3. Postponed by the user
+      2026-11-02: the runner host is Tower (docker run --network host, repo at
+      /mnt/user/code-working-dir/esp-to-mx320-printserver, PAT in
+      /mnt/user/appdata/mx320/runner.env), but the mx320-dev image does not fit
+      Unraid's 20 GB Docker vDisk (11 GB free; espressif/idf:v6.0.2 unpacks to
+      more) — needs a larger vDisk first.
       Once proven, an absent bench at verify time is an unmet precondition (not done),
       not a loss of the capability.
 
