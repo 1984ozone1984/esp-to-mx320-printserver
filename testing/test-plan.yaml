@@ -84,7 +84,7 @@ capabilities:
     what: Raw TCP from the test host to a DUT on the bench AP (192.168.4.0/24) — RAW :9100 jobs during AP toggling (FSD OD-7)
     available: no
     consequence: >-
-      The bench relays HTTP only (/api/wifi/http). FR-2.14, FR-2.15, FR-13.5 and the
+      Embedded-AI-Harness#65 (routed path requested). The bench relays HTTP only (/api/wifi/http). FR-2.14, FR-2.15, FR-13.5 and the
       `job: abort … reason=wifi` marker are blocked until a testbench change request
       adds a TCP relay or a routed path.
   bench-wifi-scan:
