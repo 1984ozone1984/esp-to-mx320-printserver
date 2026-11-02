@@ -180,9 +180,25 @@ capabilities:
   dut-power-cycle:
     what: Power the DUT off and on as FSD §2.2 defines — on a bench prompt the operator unplugs the XIAO's USB-C from the Pi (Phase 1) or disconnects the hub's 5 V supply (Phase 2 on); in both the UART adapter is not a power path to the XIAO
     available: unproven
+    observed: >-
+      Phase 1 variant proven 2026-11-02: operator unplugged the XIAO's USB-C from
+      the Pi with the UART adapter connected, re-plugged it after the second prompt;
+      SLOT3 UART then showed `rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)` at
+      17:32:11 UTC — the chip lost power, so TX/RX do not back-power it. The hub
+      5 V variant (Phase 2 on) is still unproven (agenda #13).
+    limitation: >-
+      SLOT4's hotplug state did not change during the unplug (last_event_ts stayed
+      16:39:49 UTC) and the SLOT3 capture during a concurrent /api/serial/monitor
+      shows duplicated lines and dropped characters. Consequence: tests match
+      markers on the recorded buffer with tolerance for a duplicate, and do not use
+      SLOT4 presence as power-off evidence.
   operator:
     what: A person at the bench answers portal prompts (page printed, paper removed, printer unplugged)
-    available: unproven
+    available: yes
+    observed: >-
+      2026-11-02 17:31 UTC: POST /api/human-interaction "click DONE" returned
+      {"ok": true, "confirmed": true}; "click CANCEL" returned {"ok": true,
+      "confirmed": false}. Both answers reached the caller within 7 s.
   release-verification:
     what: Tag-triggered journey run against the released artifact (.github/workflows/build.yml verify job on the devcontainer runner)
     available: unproven
