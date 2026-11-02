@@ -160,7 +160,7 @@ Transition table — **the table is normative; every row is a requirement**
 | FR-2.14 | `OPERATIONAL` | STA disconnected | — | `WIFI_RECOVERY` | Abort active job (§6) | ≤ 2 s | `[derived]` |
 | FR-2.15 | `WIFI_RECOVERY` | got IPv4 | — | `OPERATIONAL` | Restart services as FR-2.12 | RAW port accepting ≤ 30 s after AP returns | `[derived]` |
 | FR-2.16 | `WIFI_RECOVERY` | connect fails | — | `WIFI_RECOVERY` | Retry, backoff as FR-2.13 | ceiling 60 s | `[user]` (OD-2) |
-| FR-2.17 | any but `BOOT` | BOOT held ≥ 10 s | — | `FACTORY_RESET` | Erase user config (§19), reboot | reboot ≤ 3 s after threshold | `[pack:esp32]` |
+| FR-2.17 | any but `BOOT` | BOOT held ≥ 10 s | — | `FACTORY_RESET` | Erase user config (§19), reboot | erase at threshold; reboot ≤ 3 s after BOOT released | `[pack:esp32]` |
 | FR-2.20 | `OPERATIONAL` | IP lost, link up | — | `WIFI_RECOVERY` | Abort active job (§6) | ≤ 2 s | `[derived]` |
 | FR-2.18 | `PROVISIONING` | valid form submitted and STA test-join succeeds | — | `CONNECTING` | Persist config, stop SoftAP | ≤ 5 s after test-join | `[derived]` |
 
@@ -230,7 +230,7 @@ verification:
     - GET http://192.168.4.1/api/status shows `configured: false` and `state: PROVISIONING`.
     - `boot_count` equals its value before the reset plus 1 (retained per §19).
     - For the three provisioned source states: after re-provisioning with WiFi credentials and a new admin password different from the old one (no MQTT fields), `config.mqtt_host` and `config.mqtt_user` are empty, `config.mqtt_port` = 1883, `config.hostname` = `mx320-<id>`, and `POST /api/ota` with the old admin password answers 401.
-  timing: reboot ≤ 3 s after the 10 s threshold
+  timing: reboot ≤ 3 s after BOOT is released (never while BOOT is held, R7); the operator releases when answering the prompt
   tolerance: the 10 s threshold is judged from the DUT's own `button: held` ms (§25.0); the bench has no independent BOOT timing
   prohibited_outcomes:
     - DUT joins any network (home WLAN or bench AP) after reboot.
@@ -343,7 +343,7 @@ Each phase is entered using only what earlier phases delivered.
 | R4 | No MX320 driver for current macOS (Canon dropped support) | Medium | High | Dependency D3: Gutenprint "Canon PIXMA MX320" driver; AT-1 is the gate. |
 | R5 | Windows Canon driver insists on bidirectional status and stalls on a raw port | Low | Medium | User manual: disable bidirectional support on the port. |
 | R6 | Full-speed USB (≈ 1 MB/s) limits throughput | Low | Low | Printer mechanics are slower than the link; NFR-6.1 sized accordingly. |
-| R7 | GPIO0 is a strapping pin; BOOT held during power-up enters download mode | Low | Low | Factory reset is detected only after boot (FR-2.17 guard "any but BOOT"). |
+| R7 | GPIO0 is a strapping pin; BOOT held during power-up — or, if a software reset re-samples strapping pins, during that reset — enters download mode | Low | Low | Factory reset is detected only after boot (FR-2.17 guard "any but BOOT"), and its reboot waits for BOOT release (FR-2.17), so no reset happens with GPIO0 low. |
 
 **Assumptions**
 - A1 (assumed): the MX320 enumerates with an interface of class 0x07
@@ -651,7 +651,7 @@ verification:
 |---|---|---|---|---|
 | FR-11.1 | GET / | 200, HTML containing the six fields | Password values present | bench |
 | FR-11.2 | GET /api/status | Valid against Appendix B schema; ≤ 2 s | Missing required key | host (serializer) + bench |
-| FR-11.10 | (a) Bench cold flash with erase of test image X, then `cred` (FR-19.1), `admin` (FR-19.3) and `reboot` (FR-19.5) to reach OPERATIONAL: GET; (b) then OTA image Y (FR-11.3), GET after its reboot | (a) `running` = `ota_0`; `ota_0_sha256` = SHA-256 of X padded with 0xFF to 0x300000; `ota_1_sha256` = SHA-256 of 0x300000 bytes of 0xFF. (b) `running` = `ota_1`; `ota_1_sha256` differs from (a); `ota_0_sha256` unchanged; each answer ≤ 5 s | A hash equal to its value before (b) for the slot just written; auth demanded | bench |
+| FR-11.10 | (a) Bench cold flash with erase of test image X, then `cred` (FR-19.1), `admin` (FR-19.3) and `reboot` (FR-19.5) to reach OPERATIONAL: GET; (b) then OTA image Y (FR-11.3), GET after its reboot; (c) release build on the network (as FR-19.4): GET without credentials | (a) `running` = `ota_0`; `ota_0_sha256` = SHA-256 of X padded with 0xFF to 0x300000; `ota_1_sha256` = SHA-256 of 0x300000 bytes of 0xFF. (b) `running` = `ota_1`; `ota_1_sha256` differs from (a); `ota_0_sha256` unchanged; each answer ≤ 5 s; (c) 200 with all three keys | A hash equal to its value before (b) for the slot just written; auth demanded | bench |
 | FR-11.4 | POST image, no / wrong auth | 401; SHA-256 of `ota_0` and `ota_1` (slot read, §25.0) unchanged | Flash write | bench |
 | FR-11.5 | Job streaming · POST valid image | 409; job completes byte-identical; inactive-slot SHA-256 (slot read, §25.0) unchanged | Reboot mid-job; inactive slot written | bench |
 | FR-11.6 | Valid credentials · POST (a) an image whose first byte ≠ 0xE9, (b) an ESP32-C3 image, (c) a valid ESP32-S3 image (magic 0xE9, ESP32-S3 chip ID) padded to 3 145 729 bytes (0x300001), so only its size is wrong | 400; no reboot; version unchanged | Boot into partial image | bench |
@@ -750,7 +750,7 @@ verification:
 | FR-13.1 | Subscribed · (a) start a job, (b) complete it, (c) set the sink's port status to paper-out, (d) abort a job (client RST) | A new retained state ≤ 2 s after each: (a) `printing: true`, (b) `job.completed` +1, (c) `printer.status: paper_out`, (d) `job.aborted` +1 | Message without retain flag; a message still showing the previous value | bench |
 | FR-13.2 | Idle 3 min | ≥ 3 state messages | Gap > 70 s | bench |
 | FR-13.3 | Subscribe · (a) reset DUT; (b) restart a broker that keeps no persistence (bench broker) while the DUT runs | Retained `online` (a) ≤ 5 s after `wifi: got ip`, (b) ≤ 30 s after the broker restart | No retained flag; `online` missing after the broker restart | bench |
-| FR-13.7 | Power off DUT (§2.2 bench power-off) | Broker publishes retained `offline` ≤ 45 s after power-off (1.5 × keepalive, MQTT 3.1.1 §3.1.2.10), and not before 35 s (a keepalive ≤ 20 s gives ≤ 30 s, + 5 s operator allowance, §25.0) | Retained `online` stays; `offline` < 35 s | bench |
+| FR-13.7 | Power off DUT (§2.2 bench power-off) | Broker publishes retained `offline` ≤ 50 s after the power-off prompt answer (1.5 × keepalive after the DUT's last packet, MQTT 3.1.1 §3.1.2.10, ≤ 45 s, + 5 s operator allowance, §25.0) | Retained `online` still retained 50 s after the prompt answer | bench |
 | FR-13.4 | (a) DUT connects; (b) restart a broker that keeps no persistence while the DUT runs · read retained `homeassistant/#` after each | Five configs, schema-valid, same device block — (b) ≤ 30 s after the broker restart | Discovery for non-listed entities; configs missing after the broker restart | host (builder) + bench |
 | FR-13.6 | see FR-13.5 contract | — | — | bench |
 
@@ -820,7 +820,6 @@ verification:
   prohibited_outcomes:
     - DUT stays hung (no reset within 15 s).
     - Reset reason reported as anything other than TASK_WDT.
-    - Release image exposes the hang endpoint (NFR-17.6).
   tier: bench
   evidence: [trigger timestamp, UART log incl. panic output, /api/status after]
   cleanup: [OTA the baseline release image (FR-11.3)]
@@ -943,7 +942,7 @@ datagrams to `<udp_log_host>:5555` (testbench UDP log).
 | ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
 |---|---|---|---|---|
 | FR-20.1 | For each marker-table row of the phase under test, apply its stimulus | The marker appears on UART in the exact format, during that stimulus | A marker in another format; a marker without its event | bench |
-| FR-20.2 | Same, test build, OPERATIONAL | Every marker emitted while OPERATIONAL also in `/api/udplog` | A UART marker missing from the UDP log | bench |
+| FR-20.2 | Same, test build, OPERATIONAL | Every marker emitted while OPERATIONAL with the link up also in `/api/udplog` (markers of the link going down — `wifi: lost`, `state: WIFI_RECOVERY` — are UART-only) | A UART marker missing from the UDP log | bench |
 
 ## 21. Error Handling
 
@@ -1064,8 +1063,8 @@ duration; the observation is the DUT's own `button: held <ms> ms` marker, never
 the operator's timing. A run whose marker falls on the wrong side of 10 000 ms
 for the contract is repeated, not judged.
 
-**Bench-AP client.** Contracts that toggle the bench AP (FR-2.14, FR-2.15,
-FR-13.5) need the DUT on the bench AP (192.168.4.0/24) and a RAW TCP client
+**Bench-AP client.** Contracts that toggle the bench AP (FR-2.14, FR-2.15) or
+the bench broker (FR-13.5) need the DUT on the bench AP (192.168.4.0/24) and a RAW TCP client
 reaching it there; the bench broker runs on that network (192.168.4.1:1883).
 HTTP to the DUT on that network goes through the bench relay
 (`/api/wifi/http`); a raw TCP path is not declared by the bench (OD-7). The
@@ -1084,9 +1083,10 @@ attach or detach (FR-6.6, FR-8.1, FR-8.3), power-off (FR-13.7), paper removal
 (FR-7.2 a) — start at the instant an instrument records. When an operator acts,
 the bench prompt says "do it when you press OK, within 5 s" and the instant is
 the prompt's answer time; the operator acts after it, so the measured interval
-can only be longer than the real one (by at most 5 s) — an upper-bound pass is
-conclusive, an upper-bound fail is repeated before it counts, and a lower
-bound is stated with that 5 s already allowed for.
+can only be longer than the real one (by at most 5 s). Timed from a prompt
+answer, an upper bound is checked as the contract's bound + 5 s; the contract's
+own bound is checked only with an instrumented switch (`bench-usb-power-cycle`,
+not declared). No lower bound is timed from a prompt answer.
 
 The component × tier matrix is generated by `/build` from
 `testing/test-plan.yaml`.
@@ -1160,7 +1160,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.23
+fsd_version: 0.1.24
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1194,11 +1194,12 @@ change_history:
   - 0.1.21 2026-11-02 Load-defined round 18: power-cycle defined for Phase 1 (USB-C on the Pi); cold flash disconnects hub 5 V first; FR-2.10/2.11 timed from `boot:`; FR-11.10 tier and post-OTA reboot; FR-2.17 restores credentials by `cred`; FR-12.5 on the home WLAN; NFR-2.4/2.5 observable prohibitions
   - 0.1.22 2026-11-02 Load-defined round 19: OD-7 raw TCP to the bench-AP network; §25.0 Bench-AP client; Phase 1 cold-flash variant; FR-11.10 sets admin; NFR-2.4 anchor; FR-6.13 timed on the client clock; FR-2.10 bench join time excluded
   - 0.1.23 2026-11-02 Load-defined round 20: test host reads the bench broker on the bench LAN address; operator-act instant generalised; FR-13.7 lower bound; OD-3 consequence; FR-13.6 in OD-4/OD-7; OD-6 covers relay DNS (FR-12.1); FR-2.17 preconditions and restore steps
+  - 0.1.24 2026-11-02 Load-defined round 21: FR-13.7 bound from the prompt answer, no lower bound; factory-reset reboot waits for BOOT release (R7); operator-act upper bounds + 5 s; FR-11.10 release-build case; FR-20.2 excludes link-down markers; OD-3 gates AT-4; NFR-17.1 prohibition moved to NFR-17.6
 superseded_requirements: []
 open_decisions:
   - id: OD-3
-    gates: [FR-7.1, FR-7.2]
-    text: R3 — whether the MX320 maintains 1284 port-status bits; resolved at commissioning. If the bits are static, FR-7.1 states degrade to present/absent and FR-7.2 is amended; until then the Phase 2 exit item FR-7.2 (idle case a) cannot close (case b also needs the sink, OD-4).
+    gates: [FR-7.1, FR-7.2, AT-4]
+    text: R3 — whether the MX320 maintains 1284 port-status bits; resolved at commissioning. If the bits are static, FR-7.1 states degrade to present/absent and FR-7.2 is amended; until then FR-7.2 (idle case a) closes only through the sink alternative its contract allows (OD-4), and AT-4 (paper-out in HA with the real MX320, Phase 4 exit) cannot close.
   - id: OD-4
     gates: [FR-2.15, FR-6.1–FR-6.6, FR-6.8, FR-6.10, NFR-6.1, FR-7.2 (case b), FR-8.6, FR-11.5, FR-13.1 (case c), FR-13.5, FR-13.6, NFR-17.2]
     text: Availability of a USB printer-class sink on the bench (A3). Without it the byte-exact contracts run against the real MX320 and lose byte-exactness, and FR-7.2 (case b), FR-8.6 (a–c) and FR-13.1 (case c) cannot run at all (the MX320 cannot produce those stimuli on demand) — so neither the Phase 3 exit nor the Phase 4 exit (FR-13.1 case c, FR-13.5) can close until OD-4 is settled with a sink, or those contracts are amended.
