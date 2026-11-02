@@ -57,6 +57,11 @@ capabilities:
   bench-serial-write:
     what: Write a line to the DUT console (POST /api/serial/write) — the test build's `cred` command (FSD FR-19.1)
     available: yes
+    limitation: >-
+      Observed 2026-11-02 on SLOT3: POST /api/serial/write intermittently answers
+      "cannot reach the proxy on 4003: Remote does not seem to support RFC2217"
+      after its own ~19 s of retries (the slot's RFC2217 port is single-client).
+      Consequence: tests/bench/dut.py waits 45 s per call and retries up to 3 times.
   bench-serial-reset:
     what: Hard-reset the DUT through POST /api/serial/reset (DTR/RTS or EN GPIO)
     available: yes
@@ -345,9 +350,9 @@ tests:
     verifies: [FR-5.1]
     needs: []
     observable: every listed (state, event, guard) row yields its next state and actions; every unlisted pair yields `ignored`
-    impl: null
+    impl: 'tests/host/test_lifecycle.c (ctest TC-LIFE-01)'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-PLAT-01
     name: Boot marker reports the unit on the UART console
     shape: atomic
@@ -358,9 +363,9 @@ tests:
     verifies: [NFR-2.3, NFR-2.4, FR-20.1]
     needs: [bench-serial-write, bench-serial-monitor, dut-on-slot]
     observable: 'after `reboot` (FR-19.5), SLOT3 at 115200 shows `boot: fw=<ver> reset=SW count=<n> flash=8 psram=8` within 5 s of the command'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_plat_01_boot_marker'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-PLAT-02
     name: Chip read during a bench cold flash
     shape: atomic
@@ -371,9 +376,9 @@ tests:
     verifies: [NFR-2.1, NFR-2.2]
     needs: [bench-flash, bench-chip-info, bench-operator-prompt, operator, dut-on-slot]
     observable: 'during a bench cold flash (FSD §2.2) POST /api/chip/info on the native-USB slot reports ESP32-S3, flash 8MB, MAC dc:da:0c:57:57:a0'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_plat_02_chip_read_during_cold_flash'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-CON-01
     name: cred stores WiFi credentials and the DUT joins
     shape: atomic
@@ -384,9 +389,9 @@ tests:
     verifies: [FR-19.1, FR-20.1]
     needs: [bench-serial-write, bench-serial-monitor, bench-wifi-ap, dut-on-slot]
     observable: 'test build after `wipe`: `cred <bench SSID> <pass>` → `cred: stored`; after `reboot` `state: CONNECTING` then `wifi: got ip`'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_con_01_cred'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-CON-02
     name: admin stores the OTA password
     shape: atomic
@@ -397,9 +402,9 @@ tests:
     verifies: [FR-19.3, FR-20.1]
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: '`admin testpass1` → `admin: stored`; POST /api/ota of a valid image with admin:testpass1 answers 200'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_con_02_admin'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-CON-03
     name: reboot restarts the test build
     shape: atomic
@@ -410,9 +415,9 @@ tests:
     verifies: [FR-19.5, FR-20.1]
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: 'OPERATIONAL, boot_count n: `reboot` → `reboot: requested`, then within 5 s `boot: … reset=SW count=<n+1>`'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_con_03_reboot'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-CON-04
     name: wipe erases NVS and returns to PROVISIONING
     shape: atomic
@@ -423,9 +428,9 @@ tests:
     verifies: [FR-19.6, FR-20.1]
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: 'credentials stored, OPERATIONAL: `wipe` → `wipe: done`, then within 5 s `boot: … count=1` and `state: PROVISIONING`'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_con_04_wipe'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-LIFE-02
     name: Stored credentials lead to CONNECTING
     shape: atomic
@@ -436,9 +441,9 @@ tests:
     verifies: [FR-2.11, FR-20.1]
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: 'credentials stored · `reboot`: `state: CONNECTING` ≤ 2 s after the `boot:` marker; no SoftAP'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_life_02_connecting_within_2s'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-LIFE-03
     name: HTTP up within 5 s of the IP (Phase 1 case)
     shape: atomic
@@ -449,9 +454,9 @@ tests:
     verifies: [FR-2.12, FR-20.1]
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: 'credentials stored · `reboot`: GET /api/status answers 200 ≤ 5 s after `wifi: got ip`, never before it; `state: OPERATIONAL` logged'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_life_03_http_within_5s_of_ip'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-STAT-01
     name: Same version in banner and /api/status
     shape: atomic
@@ -462,9 +467,9 @@ tests:
     verifies: [FR-18.1]
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: '`boot: fw=<ver>` equals /api/status `fw`; /api/status carries fw, boot_count, reset_reason, state, heap_free'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_stat_01_version_matches'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-OTA-01
     name: Authenticated OTA writes the inactive slot and boots it
     shape: atomic
@@ -475,9 +480,9 @@ tests:
     verifies: [FR-11.3]
     needs: [bench-serial-monitor, home-wlan, dut-on-slot]
     observable: 'POST /api/ota of image Y with valid admin auth → 200; `boot:` within 5 s of the reply; /api/status fw = Y''s version; /api/slots running = the other slot'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_ota_01_authenticated_ota'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-OTA-02
     name: /api/slots hashes the app partitions from flash
     shape: atomic
@@ -488,9 +493,9 @@ tests:
     verifies: [FR-11.10]
     needs: [bench-flash, bench-operator-prompt, operator, bench-serial-write, home-wlan, dut-on-slot]
     observable: 'FSD FR-11.10 cases (a) after a cold flash with erase, (b) after an OTA, (c) on a release build without credentials — hashes as the contract states, each answer ≤ 5 s'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_ota_02_slots'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-LOG-01
     name: Markers also reach the bench UDP log
     shape: atomic
@@ -501,9 +506,9 @@ tests:
     verifies: [FR-20.2]
     needs: [bench-serial-write, bench-serial-monitor, bench-udplog, home-wlan, dut-on-slot]
     observable: 'test build OPERATIONAL: every Phase 1 marker on the UART while the link is up is also in /api/udplog'
-    impl: null
+    impl: 'tests/bench/test_phase1.py::test_tc_log_01_udp_log'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail / WILL_FAIL until it lands)
   - id: TC-CI-01
     name: Release build fits the partition table
     shape: atomic
@@ -514,9 +519,9 @@ tests:
     verifies: [NFR-23.1]
     needs: []
     observable: CI build of the release config succeeds; app size ≤ 0x300000; partition table equals FSD §23
-    impl: null
+    impl: '.github/workflows/build.yml step "TC-CI-01 image size and partition table"'
     status: not done
-    reason: test not written
+    reason: not run yet
 
 gates:
   load-defined:       {verdict: OPEN, date: 2026-11-02, commit: ef7d04f}   # fresh checker round 24 after the FR-13.9 change request (0 blocking, 5 minor, fixed after); round 23 OPEN at c7a60df

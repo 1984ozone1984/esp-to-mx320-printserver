@@ -81,6 +81,28 @@ jobs:
           fi
           echo "verified: ${{ steps.plan.outputs.variant }} image, marker $FOUND"
 
+      # TC-CI-01 (FSD NFR-23.1): the app fits its 0x300000 slot and the built
+      # partition table is exactly the one FSD §23 states.
+      - name: TC-CI-01 image size and partition table
+        run: |
+          . $IDF_PATH/export.sh >/dev/null
+          SIZE=$(stat -c %s build/$APP.bin)
+          echo "app image: $SIZE bytes (limit 3145728)"
+          [ "$SIZE" -le 3145728 ] || { echo "FAIL TC-CI-01: app exceeds 0x300000"; exit 1; }
+          python $IDF_PATH/components/partition_table/gen_esp32part.py \
+            build/partition_table/partition-table.bin > /tmp/pt.csv
+          got=$(grep -v '^#' /tmp/pt.csv | tr -d ' ' | cut -d, -f1-5 | tr 'A-F' 'a-f')
+          want="nvs,data,nvs,0x9000,24K
+          otadata,data,ota,0xf000,8K
+          phy_init,data,phy,0x11000,4K
+          ota_0,app,ota_0,0x20000,3M
+          ota_1,app,ota_1,0x320000,3M"
+          want=$(echo "$want" | tr -d ' ')
+          if [ "$got" != "$want" ]; then
+            echo "FAIL TC-CI-01: partition table differs from FSD §23"; echo "$got"; exit 1
+          fi
+          echo "TC-CI-01 passed"
+
       - name: Collect artefacts
         run: |
           A="${{ steps.plan.outputs.artefact }}"
