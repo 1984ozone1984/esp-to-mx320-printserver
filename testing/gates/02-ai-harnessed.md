@@ -2,7 +2,7 @@
 
 **Standing exclusion.** Evidence is committed artefacts in this repository, CI results, and live testbench answers only — never memory, transcripts, `~/.claude`, or the author's account of what was done. Something not found in the repository is not there; that is a finding.
 
-**Verdict format.** `OPEN`, or `SHUT` followed by one line per finding: the requirement row, the evidence looked for, and what was found instead. Return a verdict, never a fix — do not edit files.
+**Verdict format.** `OPEN`, or `SHUT` followed by one line per finding: the requirement row, the evidence looked for, and what was found instead. Return a verdict, never a fix — do not edit files. Classify each finding **BLOCKING** (a missing or broken deliverable, a check that fails, a plan entry that misstates what exists) or **MINOR** (a wording or consistency defect that does not change what the next phase can rely on). The verdict is `OPEN` when no finding is BLOCKING; MINOR findings are listed under the verdict and fixed afterwards without re-running the gate.
 
 ## Requirements
 
