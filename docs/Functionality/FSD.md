@@ -718,6 +718,9 @@ disabled while the broker host setting is empty. Base topic
   (retained) on `mx320/<id>/availability` as its MQTT last-will.
 - **FR-13.8** [Must] `[user]`: The device shall connect to the broker with an
   MQTT keep-alive of 30 s (OD-5).
+- **FR-13.9** [Must] `[user]`: When `mqtt_host` ends in `.local`, the device
+  shall resolve it by an mDNS A query on the STA interface before each broker
+  connect attempt.
 - **FR-13.4** [Should] `[pack:esp32]`: On each broker connect the device shall
   publish retained Home Assistant discovery configs under
   `homeassistant/<component>/mx320_<id>/<object>/config` for: printer state
@@ -757,6 +760,7 @@ verification:
 | FR-13.3 | Subscribe · (a) reset DUT; (b) restart a broker that keeps no persistence (bench broker) while the DUT runs | Retained `online` (a) ≤ 5 s after `wifi: got ip`, (b) ≤ 30 s after the broker restart | No retained flag; `online` missing after the broker restart | bench |
 | FR-13.7 | Power off DUT (§2.2 bench power-off) | Broker publishes retained `offline` ≤ 50 s after the power-off prompt answer (1.5 × keepalive after the DUT's last packet, MQTT 3.1.1 §3.1.2.10, ≤ 45 s, + 5 s operator allowance, §25.0) | Retained `online` still retained 50 s after the prompt answer | bench |
 | FR-13.8 | DUT on the home WLAN, `mqtt_host` set to an MQTT listener on the test host · reboot | The CONNECT packet the listener decodes carries Keep Alive = 30 | Keep Alive ≠ 30; CONNECT without a will (FR-13.7) | bench |
+| FR-13.9 | DUT on the home WLAN · (a) `mqtt_host` = the HA broker's `.local` name (`ha-broker`), valid credentials, reboot; (b) `mqtt_host` = `nonexistent-mx320.local`, reboot | (a) `mqtt.connected: true` ≤ 30 s after `wifi: got ip`; (b) `mqtt.connected: false` for 60 s, `/api/status` answering throughout | (a) never connects; (b) reboot, `state` leaves OPERATIONAL | bench |
 | FR-13.4 | (a) DUT connects; (b) restart a broker that keeps no persistence while the DUT runs · read retained `homeassistant/#` after each | Five configs, schema-valid, same device block — (b) ≤ 30 s after the broker restart | Discovery for non-listed entities; configs missing after the broker restart | host (builder) + bench |
 | FR-13.6 | see FR-13.5 contract | — | — | bench |
 
@@ -862,7 +866,7 @@ verification:
 | `wifi_pass` | string | none | empty (open) or 8–63 chars | NVS | secret | portal | next boot | cleared |
 | `admin_pass` | string | none | 8–64 chars | NVS | secret | portal, /settings, test-build UART (FR-19.3) | immediate | cleared |
 | `hostname` | string | `mx320-<id>` | 1–32 chars `[a-z0-9-]`, not starting/ending `-` | NVS | public | portal, /settings | next boot | default |
-| `mqtt_host` | string | empty (MQTT off) | empty, IPv4 dotted quad, or DNS name ≤ 64 chars | NVS | operational | portal, /settings | next MQTT connect | cleared |
+| `mqtt_host` | string | empty (MQTT off) | empty, IPv4 dotted quad, DNS name, or mDNS name ending in `.local` (FR-13.9), ≤ 64 chars | NVS | operational | portal, /settings | next MQTT connect | cleared |
 | `mqtt_port` | int | 1883 | 1–65535 | NVS | public | portal, /settings | next MQTT connect | default |
 | `mqtt_user` | string | empty | 0–64 chars | NVS | operational | portal, /settings | next MQTT connect | cleared |
 | `mqtt_pass` | string | empty | 0–64 chars | NVS | secret | portal, /settings | next MQTT connect | cleared |
@@ -1169,7 +1173,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.26
+fsd_version: 0.1.27
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1206,6 +1210,7 @@ change_history:
   - 0.1.24 2026-11-02 Load-defined round 21: FR-13.7 bound from the prompt answer, no lower bound; factory-reset reboot waits for BOOT release (R7); operator-act upper bounds + 5 s; FR-11.10 release-build case; FR-20.2 excludes link-down markers; OD-3 gates AT-4; NFR-17.1 prohibition moved to NFR-17.6
   - 0.1.25 2026-11-02 Load-defined round 22: setup SoftAP moved to 192.168.71.1/24 (off the bench AP subnet); FR-13.1 per-case anchors and 8 s paper-out; FR-7.2 6 s; keep-alive split out as FR-13.8 with a CONNECT-decoding contract; FR-6.13 1 KiB job; FR-2.16, FR-2.18, FR-2.20, FR-11.9, FR-12.7 contract fixes; portal client re-join on channel change; OD-3/OD-4 Phase 2 consequence
   - 0.1.26 2026-11-02 Load-defined round 23 (OPEN; minor fixes): FR-6.9/6.12 abort stimuli; FR-2.10 portal deadline; cold-flash erase defined; Phase 1 depends on UART only; broker-only contracts on the home WLAN (OD-7 narrowed); `button: held` one line per press; FR-2.17 forbids reboot while held
+  - 0.1.27 2026-11-02 Change request (user): `mqtt_host` accepts mDNS `.local` names, resolved by the device (FR-13.9)
 superseded_requirements: []
 open_decisions:
   - id: OD-3

@@ -193,9 +193,9 @@ capabilities:
       a fresh mx320/commission/<id> topic came back on the same client's
       subscription. HA's own MQTT listener was not observed (broker-level proof).
     limitation: >-
-      The broker is named by a .local host. Whether the DUT's mqtt_host accepts
-      and resolves an mDNS .local name is not stated by FSD §19 (open question to
-      the user); until then tests configure the broker by its IPv4 address.
+      The broker is named by a .local host; the DUT resolves it by mDNS (FSD
+      FR-13.9, user decision 2026-11-02). Tests other than FR-13.9 may use the
+      resolved IPv4 address.
   usb-test-peripherals:
     what: A second USB hub (cascade for NFR-2.7) and a USB flash drive (FR-8.5, FR-8.8) on the product hub
     available: unproven
