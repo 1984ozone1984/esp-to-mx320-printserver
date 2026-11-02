@@ -174,12 +174,16 @@ capabilities:
       #8) waits until it is back; the requirement is unchanged.
   home-wlan:
     what: Home WLAN per FSD A2 (2.4 GHz, WPA2-PSK, DHCP), credentials as HOME_WIFI_SSID / HOME_WIFI_PASS (devcontainer env from the host env; on the Unraid session, KEY=value file /mnt/code/secrets/mx320-home-wifi.env outside every repo — never committed), devcontainer, Mac, PC and DUT on one L2 segment for mDNS
-    available: unproven
+    available: yes
     observed: >-
       2026-11-02 bench GET /api/wifi/scan: the home SSID on channel 1 (-48 dBm),
       6, 11 (2.4 GHz) and 36 (5 GHz), all WPA2. mDNS browse from 192.168.8.183 saw
       the Mac ("MacBook Air von Stefan", Mac14,2, 192.168.8.157) — same /24 as the
-      bench (192.168.8.70). Open: a DHCP lease on the WLAN; the Windows PC (down).
+      bench (192.168.8.70). Bench station joined the home WLAN and was leased
+      192.168.8.176, gateway 192.168.8.1 (then left).
+    limitation: >-
+      The Windows PC is down and has not been seen on mDNS. Consequence: Windows
+      client checks wait (Mac-first decision); agenda #11 stays open for the PC only.
   ha-broker:
     what: The Home Assistant MQTT broker, reachable from the home WLAN and from the devcontainer (MQTT_HOST/USER/PASS in host env)
     available: unproven
