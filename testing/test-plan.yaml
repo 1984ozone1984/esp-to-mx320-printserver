@@ -520,8 +520,9 @@ tests:
     needs: []
     observable: CI build of the release config succeeds; app size ≤ 0x300000; partition table equals FSD §23
     impl: '.github/workflows/build.yml step "TC-CI-01 image size and partition table"'
-    status: not done
-    reason: not run yet
+    status: successful
+    commit: c7b4bae
+    evidence: 'CI run 41503593353: app image 260304 bytes (limit 3145728); partition table equals FSD §23'
 
 gates:
   load-defined:       {verdict: OPEN, date: 2026-11-02, commit: ef7d04f}   # fresh checker round 24 after the FR-13.9 change request (0 blocking, 5 minor, fixed after); round 23 OPEN at c7a60df
