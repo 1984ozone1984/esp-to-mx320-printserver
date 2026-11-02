@@ -9,7 +9,6 @@
 #
 # Run once, by the repository owner:  bash .devcontainer/runner/register.sh
 set -euo pipefail
-REPO=1984ozone1984/esp-to-mx320-printserver
 touch /opt/actions-runner/.registration-granted
 echo "Registration granted. start.sh now loops: fetch a token, take one job, exit."
 bash "$(dirname "$0")/start.sh"
