@@ -1,5 +1,7 @@
 /* HTTP API pure core (FSD §11, §22). No ESP-IDF includes. */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include "http_api_core.h"
 
 #include <string.h>
