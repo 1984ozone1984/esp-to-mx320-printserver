@@ -351,8 +351,8 @@ tests:
     needs: []
     observable: every listed (state, event, guard) row yields its next state and actions; every unlisted pair yields `ignored`
     impl: 'tests/host/test_lifecycle.c (ctest TC-LIFE-01)'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: e7d7996
   - id: TC-PLAT-01
     name: Boot marker reports the unit on the UART console
     shape: atomic
