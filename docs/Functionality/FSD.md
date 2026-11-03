@@ -90,8 +90,10 @@ USB-C from the hub's upstream port — in Phase 1, where the USB-C is already on
 the Pi, from the Pi — and plugs it into the Pi **while holding BOOT**, releasing it once plugged in — the chip starts in ROM download
 mode (R7), which works whatever the installed firmware does with the USB PHY;
 the testbench flashes through that native-USB slot (with erase where the
-contract says so — "erase" means images of 0xFF bytes written over `nvs` and
-`ota_1` at their §23 offsets in the same flash) and resets the chip; the operator moves the cable back and reconnects the hub's 5 V. The MX320 is absent from the ESP during it.
+contract says so — "erase" means the app image written to `ota_0` padded with
+0xFF bytes to the slot's full 0x300000, and images of 0xFF bytes written over
+`nvs` and `ota_1`, all at their §23 offsets in the same flash, so no byte of an
+earlier image survives in any of the three) and resets the chip; the operator moves the cable back and reconnects the hub's 5 V. The MX320 is absent from the ESP during it.
 
 Platform constraints — each one a number the build reads (§23 binds them to
 build settings):
@@ -1173,7 +1175,7 @@ without its `ESP_RST_` prefix (`POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`,
 
 ```yaml
 document_status: draft
-fsd_version: 0.1.28
+fsd_version: 0.1.29
 repository: esp-to-mx320-printserver (local git; no remote yet)
 baseline_commit: (initial commit)
 applicable_firmware_version: none yet
@@ -1181,7 +1183,7 @@ author: user + Claude (/define)
 reviewers: []
 approval_status: pending — OD-1/OD-2/OD-5 accepted; OD-3/OD-4/OD-6/OD-7 open; udp_log_host default still proposed
 created: 2026-11-01
-last_updated: 2026-11-02
+last_updated: 2026-11-03
 change_history:
   - 0.1.0 2026-11-01 initial FSD
   - 0.1.1 2026-11-01 OD-1 and OD-2 accepted by the user; values approved
@@ -1212,6 +1214,7 @@ change_history:
   - 0.1.26 2026-11-02 Load-defined round 23 (OPEN; minor fixes): FR-6.9/6.12 abort stimuli; FR-2.10 portal deadline; cold-flash erase defined; Phase 1 depends on UART only; broker-only contracts on the home WLAN (OD-7 narrowed); `button: held` one line per press; FR-2.17 forbids reboot while held
   - 0.1.27 2026-11-02 Change request (user): `mqtt_host` accepts mDNS `.local` names, resolved by the device (FR-13.9)
   - 0.1.28 2026-11-02 Load-defined round 24 (OPEN; minor fixes): FR-13.9 names the broker env and observes re-resolution; FR-6.13 prohibition anchored; FR-2.17 stops the bench AP before observing the SoftAP
+  - 0.1.29 2026-11-03 Spec defect from /build (TC-OTA-02): the §2.2 cold-flash erase left the tail of `ota_0` untouched, so FR-11.10(a) failed whenever an earlier, longer image had been there (bench flash read 2026-11-03: 291 592 non-0xFF bytes at 0xd1000–0x11982f); erase now pads the image to the full `ota_0` slot
 superseded_requirements: []
 open_decisions:
   - id: OD-3
