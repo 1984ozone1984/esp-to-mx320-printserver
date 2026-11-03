@@ -66,9 +66,12 @@ def test_jrn_01_1_flash_and_boot_unprovisioned(bench, coldflash_dir, request):
     dut.wait_cold_flash_slot()
     dut.cold_flash(coldflash_dir, erase=True)
 
-    t = dut.bench_now()   # after the flash's own reset: only the power-cycle boot counts
-    dut.operator("JRN-01.1: power-cycle the XIAO — unplug its USB-C from the Pi, wait 3 s, "
-                 "plug it back in (do NOT hold BOOT). Click DONE when done.")
+    # Power-cycle in two prompts, so the XIAO is surely unpowered between them
+    # (2026-11-03: a single "unplug, wait, replug" prompt left the chip running).
+    dut.operator("JRN-01.1: unplug the XIAO USB-C from the Pi and LEAVE IT UNPLUGGED. "
+                 "Click DONE while it is still unplugged.")
+    t = dut.bench_now()   # after the flash's own resets: only the power-cycle boot counts
+    dut.operator("JRN-01.1: plug the XIAO USB-C back into the Pi (do NOT hold BOOT). Click DONE when done.")
     b = dut.wait_line(BOOT, t, 20)
     assert b, "no `boot:` marker on the UART after the power-cycle"
     assert b[1].group(1) == J["version"], f"boot fw={b[1].group(1)}, expected {J['version']}"

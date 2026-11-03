@@ -208,6 +208,10 @@ capabilities:
     what: Power the DUT off and on as FSD §2.2 defines — on a bench prompt the operator unplugs the XIAO's USB-C from the Pi (Phase 1) or disconnects the hub's 5 V supply (Phase 2 on); in both the UART adapter is not a power path to the XIAO
     available: unproven
     observed: >-
+      2026-11-03 (JRN-01.1 prep): with the USB-C unplugged the console did not answer
+      `admin x`; on replug `rst:0x1 (POWERON)` and `boot: … reset=POWERON`. A one-prompt
+      "unplug, wait 3 s, replug" earlier the same day left the chip running — the journey
+      now prompts unplug and replug separately.
       Phase 1 variant proven 2026-11-02: operator unplugged the XIAO's USB-C from
       the Pi with the UART adapter connected, re-plugged it after the second prompt;
       SLOT3 UART then showed `rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)` at
@@ -255,8 +259,8 @@ tests:
     needs: [bench-flash, bench-operator-prompt, operator, bench-serial-monitor, dut-on-slot, dut-power-cycle]
     observable: 'bench cold flash (FSD §2.2: operator moves USB-C to the Pi), with erase, ok at flash_args offsets; after the operator power-cycles, UART shows `boot: fw=<expected version>` then `state: PROVISIONING`'
     impl: 'tests/bench/test_journey.py::test_jrn_01_1_flash_and_boot_unprovisioned'
-    status: not done
-    reason: not yet run
+    status: successful
+    commit: 13d78f6
   - id: JRN-01.2
     name: Provision through the captive portal
     shape: workflow
@@ -282,8 +286,9 @@ tests:
     stand_in: until JRN-01.2 (portal, FSD Phase 4) lands, a test-build image stores the credentials through the console (FR-19.1/19.3, P-BASELINE); a release image is blocked by JRN-01.2
     observable: 'UART `wifi: got ip <ip>`; GET http://<ip>/api/status from the devcontainer returns `state: OPERATIONAL`'
     impl: 'tests/bench/test_journey.py::test_jrn_01_3_operational_on_home_wlan'
-    status: not done
-    reason: not yet run
+    status: successful
+    commit: 13d78f6
+    note: passed through its stand-in (console credentials), not through JRN-01.2
   - id: JRN-01.4
     name: Printer claimed
     shape: workflow

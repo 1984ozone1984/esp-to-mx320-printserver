@@ -243,7 +243,18 @@ def cold_flash(coldflash_dir, erase=True):
     body += f"--{boundary}--\r\n".encode()
     req = urllib.request.Request(BENCH + "/api/flash", data=body, method="POST",
                                  headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-    with urllib.request.urlopen(req, timeout=600) as r:
-        res = json.loads(r.read())
+    # One retry on a 5xx: right after the operator's replug the slot can be
+    # present before the bench's proxy for it is ready (observed 2026-11-03:
+    # 500, and the same request succeeded a minute later).
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(req, timeout=600) as r:
+                res = json.loads(r.read())
+            break
+        except urllib.error.HTTPError as e:
+            detail = f"cold flash: bench answered {e.code}: {e.read()[:500]!r}"
+            if e.code < 500 or attempt == 2:
+                raise AssertionError(detail) from e
+            time.sleep(5)
     assert res.get("ok"), f"cold flash failed: {res.get('error')}"
     return parts
