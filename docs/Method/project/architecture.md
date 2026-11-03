@@ -52,5 +52,6 @@ ESP-IDF project; one component per FSD component, named by layer:
 
 - Build container: `espressif/idf:v6.0.2`.
 - Testbench: `http://192.168.8.70:8080`; UDP log port 5555; console via the
-  USB-UART adapter slot (SLOT3, RX/TX only); images by OTA, cold flash only
+  USB-UART adapter slot (found by USB id 0403:6001 — slot labels move
+  when the bench reboots; RX/TX only); images by OTA, cold flash only
   through the XIAO's USB-C moved to the Pi (FSD §2.2).

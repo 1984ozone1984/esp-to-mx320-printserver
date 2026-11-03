@@ -15,13 +15,13 @@ dut:
   flash: 8MB              # FSD NFR-2.2
   psram: 8MB octal        # FSD NFR-2.3
   console: UART0 GPIO43/44 via a USB-UART adapter on a bench slot (FSD NFR-2.4)
-  slot: SLOT3             # UART console (FT232R 0403:6001, /dev/ttyUSB0); tests find the DUT by MAC
+  slot: by-usb-id 0403:6001  # UART console (FT232R); labels move on bench reboot (SLOT3 on 2026-11-02, SLOT2 on 2026-11-03); DUT_SLOT overrides
   mac: dc:da:0c:57:57:a0  # POST /api/chip/info 2026-11-02 (SLOT4, native USB)
   observed: >-
     2026-11-02 /api/chip/info: ESP32-S3 (QFN56) rev v0.2, flash 8MB (GD c8/4017,
     quad eFuse, run as DIO), embedded PSRAM 8MB (octal_psram: 64 Mbit, gen 3),
     40 MHz crystal. Matches FSD NFR-2.1-2.3.
-  cold_flash_slot: SLOT4  # XIAO native USB (303a:1001) while its USB-C is on the Pi: bench cold flash only (FSD §2.2); OTA otherwise
+  cold_flash_slot: by-usb-id 303a:1001  # was SLOT4 2026-11-02, SLOT3 2026-11-03; XIAO native USB (303a:1001) while its USB-C is on the Pi: bench cold flash only (FSD §2.2); OTA otherwise
 testbench:
   # Dated observation, not an address to hard-code: tests take TESTBENCH_URL
   # from the environment.
@@ -362,10 +362,10 @@ tests:
     tier: bench
     verifies: [NFR-2.3, NFR-2.4, FR-20.1]
     needs: [bench-serial-write, bench-serial-monitor, dut-on-slot]
-    observable: 'after `reboot` (FR-19.5), SLOT3 at 115200 shows `boot: fw=<ver> reset=SW count=<n> flash=8 psram=8` within 5 s of the command'
+    observable: 'after `reboot` (FR-19.5), the console slot at 115200 shows `boot: fw=<ver> reset=SW count=<n> flash=8 psram=8` within 5 s of the command'
     impl: 'tests/bench/test_phase1.py::test_tc_plat_01_boot_marker'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-PLAT-02
     name: Chip read during a bench cold flash
     shape: atomic
@@ -377,8 +377,8 @@ tests:
     needs: [bench-flash, bench-chip-info, bench-operator-prompt, operator, dut-on-slot]
     observable: 'during a bench cold flash (FSD §2.2) POST /api/chip/info on the native-USB slot reports ESP32-S3, flash 8MB, MAC dc:da:0c:57:57:a0'
     impl: 'tests/bench/test_phase1.py::test_tc_plat_02_chip_read_during_cold_flash'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-CON-01
     name: cred stores WiFi credentials and the DUT joins
     shape: atomic
@@ -390,8 +390,8 @@ tests:
     needs: [bench-serial-write, bench-serial-monitor, bench-wifi-ap, dut-on-slot]
     observable: 'test build after `wipe`: `cred <bench SSID> <pass>` → `cred: stored`; after `reboot` `state: CONNECTING` then `wifi: got ip`'
     impl: 'tests/bench/test_phase1.py::test_tc_con_01_cred'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-CON-02
     name: admin stores the OTA password
     shape: atomic
@@ -403,8 +403,8 @@ tests:
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: '`admin testpass1` → `admin: stored`; POST /api/ota of a valid image with admin:testpass1 answers 200'
     impl: 'tests/bench/test_phase1.py::test_tc_con_02_admin'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-CON-03
     name: reboot restarts the test build
     shape: atomic
@@ -416,8 +416,8 @@ tests:
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: 'OPERATIONAL, boot_count n: `reboot` → `reboot: requested`, then within 5 s `boot: … reset=SW count=<n+1>`'
     impl: 'tests/bench/test_phase1.py::test_tc_con_03_reboot'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-CON-04
     name: wipe erases NVS and returns to PROVISIONING
     shape: atomic
@@ -429,8 +429,8 @@ tests:
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: 'credentials stored, OPERATIONAL: `wipe` → `wipe: done`, then within 5 s `boot: … count=1` and `state: PROVISIONING`'
     impl: 'tests/bench/test_phase1.py::test_tc_con_04_wipe'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-LIFE-02
     name: Stored credentials lead to CONNECTING
     shape: atomic
@@ -442,8 +442,8 @@ tests:
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: 'credentials stored · `reboot`: `state: CONNECTING` ≤ 2 s after the `boot:` marker; no SoftAP'
     impl: 'tests/bench/test_phase1.py::test_tc_life_02_connecting_within_2s'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-LIFE-03
     name: HTTP up within 5 s of the IP (Phase 1 case)
     shape: atomic
@@ -455,8 +455,8 @@ tests:
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: 'credentials stored · `reboot`: GET /api/status answers 200 ≤ 5 s after `wifi: got ip`, never before it; `state: OPERATIONAL` logged'
     impl: 'tests/bench/test_phase1.py::test_tc_life_03_http_within_5s_of_ip'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-STAT-01
     name: Same version in banner and /api/status
     shape: atomic
@@ -468,8 +468,8 @@ tests:
     needs: [bench-serial-write, bench-serial-monitor, home-wlan, dut-on-slot]
     observable: '`boot: fw=<ver>` equals /api/status `fw`; /api/status carries fw, boot_count, reset_reason, state, heap_free'
     impl: 'tests/bench/test_phase1.py::test_tc_stat_01_version_matches'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-OTA-01
     name: Authenticated OTA writes the inactive slot and boots it
     shape: atomic
@@ -481,8 +481,8 @@ tests:
     needs: [bench-serial-monitor, home-wlan, dut-on-slot]
     observable: 'POST /api/ota of image Y with valid admin auth → 200; `boot:` within 5 s of the reply; /api/status fw = Y''s version; /api/slots running = the other slot'
     impl: 'tests/bench/test_phase1.py::test_tc_ota_01_authenticated_ota'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-OTA-02
     name: /api/slots hashes the app partitions from flash
     shape: atomic
@@ -507,8 +507,8 @@ tests:
     needs: [bench-serial-write, bench-serial-monitor, bench-udplog, home-wlan, dut-on-slot]
     observable: 'test build OPERATIONAL: every Phase 1 marker on the UART while the link is up is also in /api/udplog'
     impl: 'tests/bench/test_phase1.py::test_tc_log_01_udp_log'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-CI-01
     name: Release build fits the partition table
     shape: atomic

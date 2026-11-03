@@ -16,7 +16,6 @@ FEATURE_ABSENT = pytest.mark.xfail(reason="Phase 1 feature not yet in the firmwa
 BOOT = r"boot: fw=(\S+) reset=(\S+) count=(\d+) flash=(\d+) psram=(\d+)"
 
 
-@FEATURE_ABSENT
 def test_tc_plat_01_boot_marker(baseline_ip):
     """NFR-2.3, NFR-2.4, FR-20.1: boot marker on the UART after `reboot`."""
     t = dut.write("reboot")
@@ -27,7 +26,6 @@ def test_tc_plat_01_boot_marker(baseline_ip):
     assert (m.group(4), m.group(5)) == ("8", "8"), f"flash={m.group(4)} psram={m.group(5)}"
 
 
-@FEATURE_ABSENT
 @pytest.mark.slow
 def test_tc_plat_02_chip_read_during_cold_flash(bench, coldflash_dir):
     """NFR-2.1, NFR-2.2: chip read on the native-USB slot during a bench cold flash."""
@@ -42,7 +40,6 @@ def test_tc_plat_02_chip_read_during_cold_flash(bench, coldflash_dir):
     dut.cold_flash(coldflash_dir, erase=True)
 
 
-@FEATURE_ABSENT
 def test_tc_con_01_cred(bench):
     """FR-19.1: `cred` stores credentials; after reboot CONNECTING then got ip."""
     ssid, pw = dut.home_wifi()
@@ -56,7 +53,6 @@ def test_tc_con_01_cred(bench):
     assert dut.wait_line(r"wifi: got ip", c[0], 60), "no `wifi: got ip`"
 
 
-@FEATURE_ABSENT
 def test_tc_con_02_admin(baseline_ip, ota_image):
     """FR-19.3: `admin` stores the OTA password; OTA with it answers 200."""
     t = dut.write("admin testpass2")
@@ -66,7 +62,6 @@ def test_tc_con_02_admin(baseline_ip, ota_image):
     dut.wait_line(r"wifi: got ip", t, 60)   # let it come back before cleanup
 
 
-@FEATURE_ABSENT
 def test_tc_con_03_reboot(baseline_ip):
     """FR-19.5: `reboot` → `reboot: requested`, then within 5 s boot reset=SW count=n+1."""
     n = dut.status(baseline_ip)["boot_count"]
@@ -79,7 +74,6 @@ def test_tc_con_03_reboot(baseline_ip):
     assert int(b[1].group(3)) == n + 1, f"count {b[1].group(3)}, want {n + 1}"
 
 
-@FEATURE_ABSENT
 def test_tc_con_04_wipe(baseline_ip):
     """FR-19.6: `wipe` → `wipe: done`, within 5 s boot count=1 and PROVISIONING."""
     t = dut.write("wipe")
@@ -91,7 +85,6 @@ def test_tc_con_04_wipe(baseline_ip):
     assert s and s[1].group(1) == "PROVISIONING", "after wipe: not PROVISIONING"
 
 
-@FEATURE_ABSENT
 def test_tc_life_02_connecting_within_2s(baseline_ip):
     """FR-2.11: credentials stored · reset → CONNECTING ≤ 2 s after the boot marker."""
     t = dut.write("reboot")
@@ -103,7 +96,6 @@ def test_tc_life_02_connecting_within_2s(baseline_ip):
     assert not dut.lines_matching(r"SoftAP|state: PROVISIONING", b[0] - 0.001), "SoftAP started"
 
 
-@FEATURE_ABSENT
 def test_tc_life_03_http_within_5s_of_ip(baseline_ip):
     """FR-2.12 (Phase 1 case): /api/status 200 ≤ 5 s after `wifi: got ip`, never before.
     Host and bench clocks are assumed NTP-synced (≤ 0.5 s)."""
@@ -128,7 +120,6 @@ def test_tc_life_03_http_within_5s_of_ip(baseline_ip):
     assert dut.wait_line(r"state: OPERATIONAL", t, 5), "no `state: OPERATIONAL`"
 
 
-@FEATURE_ABSENT
 def test_tc_stat_01_version_matches(baseline_ip):
     """FR-18.1 (banner + /api/status) and the Phase 1 status fields."""
     t = dut.write("reboot")
@@ -143,7 +134,6 @@ def test_tc_stat_01_version_matches(baseline_ip):
     assert st["fw"] == b[1].group(1), f"banner {b[1].group(1)} vs status {st['fw']}"
 
 
-@FEATURE_ABSENT
 def test_tc_ota_01_authenticated_ota(baseline_ip, ota_image):
     """FR-11.3: valid image + auth → 200, reboot ≤ 5 s after the reply, running the other slot."""
     ip = baseline_ip
@@ -190,7 +180,6 @@ def test_tc_ota_02_slots(bench, coldflash_dir, ota_image):
     assert b["ota_0_sha256"] == a["ota_0_sha256"]
 
 
-@FEATURE_ABSENT
 def test_tc_log_01_udp_log(baseline_ip):
     """FR-20.2: markers emitted while OPERATIONAL with the link up also reach /api/udplog."""
     dut._bench("DELETE", "/api/udplog")
