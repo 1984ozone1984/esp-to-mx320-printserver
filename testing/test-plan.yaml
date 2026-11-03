@@ -254,9 +254,9 @@ tests:
     verifies: [NFR-2.4, FR-20.1]
     needs: [bench-flash, bench-operator-prompt, operator, bench-serial-monitor, dut-on-slot, dut-power-cycle]
     observable: 'bench cold flash (FSD §2.2: operator moves USB-C to the Pi), with erase, ok at flash_args offsets; after the operator power-cycles, UART shows `boot: fw=<expected version>` then `state: PROVISIONING`'
-    impl: null
+    impl: 'tests/bench/test_journey.py::test_jrn_01_1_flash_and_boot_unprovisioned'
     status: not done
-    reason: test not written
+    reason: not yet run
   - id: JRN-01.2
     name: Provision through the captive portal
     shape: workflow
@@ -267,9 +267,9 @@ tests:
     verifies: [FR-2.10, FR-12.1]   # FR-12.2, FR-12.3, FR-2.18 contracts use the bench AP: their own wave tests
     needs: [bench-wifi-sta, home-wlan]
     observable: bench joins `MX320-Setup-<id>`, setup page served, home-WLAN credentials + admin password submitted and accepted; SoftAP gone within 5 s of the test-join
-    impl: null
+    impl: 'tests/bench/test_journey.py::test_jrn_01_2_provision_through_portal'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail until its FSD phase lands)
   - id: JRN-01.3
     name: DUT operational on the home WLAN
     shape: workflow
@@ -279,10 +279,11 @@ tests:
     tier: bench
     verifies: [FR-2.11, FR-2.12]
     needs: [bench-serial-monitor, home-wlan]
+    stand_in: until JRN-01.2 (portal, FSD Phase 4) lands, a test-build image stores the credentials through the console (FR-19.1/19.3, P-BASELINE); a release image is blocked by JRN-01.2
     observable: 'UART `wifi: got ip <ip>`; GET http://<ip>/api/status from the devcontainer returns `state: OPERATIONAL`'
-    impl: null
+    impl: 'tests/bench/test_journey.py::test_jrn_01_3_operational_on_home_wlan'
     status: not done
-    reason: test not written
+    reason: not yet run
   - id: JRN-01.4
     name: Printer claimed
     shape: workflow
@@ -293,9 +294,9 @@ tests:
     verifies: [FR-8.1, FR-8.2, FR-8.9]
     needs: [usb-host-hub-power, printer-mx320]
     observable: '/api/status `printer.present: true`, `mdl` = the MX320''s 1284 MDL (expected "MX320 series"), `status: ready`'
-    impl: null
+    impl: 'tests/bench/test_journey.py::test_jrn_01_4_printer_claimed'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail until its FSD phase lands)
   - id: JRN-01.5
     name: Printer discoverable via mDNS
     shape: workflow
@@ -306,9 +307,9 @@ tests:
     verifies: [FR-10.1, FR-10.2]
     needs: [home-wlan]
     observable: from the devcontainer, `_pdl-datastream._tcp` browse finds the instance on port 9100 with TXT usb_MDL = the claimed MDL; `<hostname>.local` resolves to the DUT IP
-    impl: null
+    impl: 'tests/bench/test_journey.py::test_jrn_01_5_discoverable_via_mdns'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail until its FSD phase lands)
   - id: JRN-01.6
     name: Print one page
     shape: workflow
@@ -319,9 +320,9 @@ tests:
     verifies: [FR-9.1, FR-6.1, FR-6.4, FR-6.9]
     needs: [mx320-job-file, operator, bench-operator-prompt]
     observable: 'job file sent to <ip>:9100 and closed; log `job: done bytes=<file size>`; /api/status job.completed +1; operator confirms the known page printed'
-    impl: null
+    impl: 'tests/bench/test_journey.py::test_jrn_01_6_print_one_page'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail until its FSD phase lands)
   - id: JRN-01.7
     name: Status reaches Home Assistant's broker
     shape: workflow
@@ -332,9 +333,9 @@ tests:
     verifies: [FR-13.1, FR-13.3]
     needs: [ha-broker]
     observable: retained `mx320/<id>/availability` = online and `mx320/<id>/state` with job.completed equal to the value after JRN-01.6
-    impl: null
+    impl: 'tests/bench/test_journey.py::test_jrn_01_7_status_reaches_ha_broker'
     status: not done
-    reason: test not written
+    reason: feature absent (xfail until its FSD phase lands)
 
   # --- FSD Phase 1 slice, Wave 1: standard tests only (deviation / negative /
   # security tests for the Phase 1 exit — FR-2.13, FR-2.16, FR-2.20, FR-11.4,
