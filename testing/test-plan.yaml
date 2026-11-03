@@ -494,8 +494,8 @@ tests:
     needs: [bench-flash, bench-operator-prompt, operator, bench-serial-write, home-wlan, dut-on-slot]
     observable: 'FSD FR-11.10 cases (a) after a cold flash with erase, (b) after an OTA, (c) on a release build without credentials — hashes as the contract states, each answer ≤ 5 s'
     impl: 'tests/bench/test_phase1.py::test_tc_ota_02_slots'
-    status: not done
-    reason: feature absent (xfail / WILL_FAIL until it lands)
+    status: successful
+    commit: 13d78f6
   - id: TC-LOG-01
     name: Markers also reach the bench UDP log
     shape: atomic

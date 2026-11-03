@@ -216,7 +216,8 @@ def chip_info():
 
 def cold_flash(coldflash_dir, erase=True):
     """Flash the images named in flash_args at their offsets through the native-USB
-    slot; erase = 0xFF images over nvs and ota_1 (FSD §2.2, §23)."""
+    slot; erase = the app padded with 0xFF to the full ota_0 slot, and 0xFF images
+    over nvs and ota_1 (FSD 0.1.29 §2.2, §23)."""
     import uuid
     parts = []
     with open(os.path.join(coldflash_dir, "flash_args")) as f:
@@ -227,6 +228,8 @@ def cold_flash(coldflash_dir, erase=True):
                 with open(os.path.join(coldflash_dir, name), "rb") as img:
                     parts.append((tok[0], name, img.read()))
     if erase:
+        parts = [(off, n, d + b"\xff" * (0x300000 - len(d)) if off == "0x20000" else d)
+                 for off, n, d in parts]
         parts.append(("0x9000", "nvs_erase.bin", b"\xff" * 0x6000))
         parts.append(("0x320000", "ota1_erase.bin", b"\xff" * 0x300000))
     boundary = "mx320cf" + uuid.uuid4().hex

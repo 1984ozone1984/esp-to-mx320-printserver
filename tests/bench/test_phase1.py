@@ -153,7 +153,6 @@ def test_tc_ota_01_authenticated_ota(baseline_ip, ota_image):
     assert after["running"] != before["running"], "still running the same slot"
 
 
-@FEATURE_ABSENT
 @pytest.mark.slow
 def test_tc_ota_02_slots(bench, coldflash_dir, ota_image):
     """FR-11.10 (a) after a cold flash with erase, (b) after an OTA."""
