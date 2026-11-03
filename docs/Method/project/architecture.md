@@ -21,6 +21,7 @@ ESP-IDF project; one component per FSD component, named by layer:
 | L1 | `components/mqtt_publisher` | §13 |
 | D | `components/config_store` | §19 |
 | D | `components/udp_log` | §20 |
+| D | `components/device_info` | §18, §20 boot marker, App. B `reset_reason` |
 | — | `main/` | composition root only: wires components, no logic |
 
 ## Dependency rules
