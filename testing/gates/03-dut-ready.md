@@ -20,7 +20,7 @@
 ```bash
 curl -sf -m 10 $TESTBENCH_URL/api/info
 grep -c 'available: unproven' testing/test-plan.yaml          # expect 0
-awk -F'|' 'NR>8 && $8 ~ /^ *$/' testing/debugging-agenda.md   # expect no open rows
+awk -F'|' 'NR>8 && $7 ~ /^ *$/' testing/debugging-agenda.md   # expect no open rows ($7 = Closed)
 ```
 
 ## Judgement checks

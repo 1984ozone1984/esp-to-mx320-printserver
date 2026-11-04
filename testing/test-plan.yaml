@@ -21,7 +21,7 @@ dut:
     2026-11-02 /api/chip/info: ESP32-S3 (QFN56) rev v0.2, flash 8MB (GD c8/4017,
     quad eFuse, run as DIO), embedded PSRAM 8MB (octal_psram: 64 Mbit, gen 3),
     40 MHz crystal. Matches FSD NFR-2.1-2.3.
-  cold_flash_slot: by-usb-id 303a:1001  # was SLOT4 2026-11-02, SLOT3 2026-11-03; XIAO native USB (303a:1001) while its USB-C is on the Pi: bench cold flash only (FSD §2.2); OTA otherwise
+  cold_flash_slot: by-usb-id 303a:1001  # was SLOT4 2026-11-02, SLOT3 2026-11-03, SLOT8 2026-11-04 (console adapter now on Pi port AUTO-1; XIAO USB-C now in the hub's upstream port — product wiring); XIAO native USB (303a:1001) while its USB-C is on the Pi: bench cold flash only (FSD §2.2); OTA otherwise
 testbench:
   # Dated observation, not an address to hard-code: tests take TESTBENCH_URL
   # from the environment.
@@ -149,13 +149,50 @@ capabilities:
       acts observed through `button: held`. bench-serial-reset and bench-gpio are unused.
   usb-host-hub-power:
     what: With the XIAO on the active hub's upstream port, the hub enables its downstream ports and the ESP sees devices attach (FSD R1)
-    available: unproven
+    available: yes
+    observed: >-
+      2026-11-04 commissioning probe (commissioning/usb-probe @ a759800, CI run
+      41860155344, cold-flashed at its flash_args offsets 0x0/0x8000/0x10000 over the
+      XIAO native USB on bench slot SLOT8). Wiring: XIAO USB-C in the hub's upstream
+      port, XIAO 5V pin + GND fed from a spare downstream port of the same hub, the
+      Pi on no port of this hub, the UART adapter directly on a Pi port (slot AUTO-1).
+      POWERON 17:27:57; `probe: attach addr=2 vid=04a9 pid=1736` at 17:28:52 — the hub
+      took address 1 (handled by the host library's hub driver, no client event).
+    limitation: >-
+      With the XIAO's USB-C in a downstream port (powered from it) or with the Pi as
+      the hub's upstream host, the ESP sees nothing (devices=0) — one USB host per
+      tree. Not established whether 5 V on the 5V pin reaches the USB-C VBUS or the
+      hub ignores upstream VBUS; either way the arrangement works with this hub.
+      The attach came 55 s after boot; when the MX320 / hub link came up relative to
+      the operator's last act was not recorded, so no attach latency is claimed.
   printer-mx320:
     what: The MX320 behind the hub exposes a class 07/01 printer interface and returns an IEEE 1284 Device ID to the ESP (FSD A1, R2)
-    available: unproven
+    available: yes
+    observed: >-
+      2026-11-04 17:28:52-53, read by the ESP itself (commissioning probe, wiring as
+      usb-host-hub-power): VID 0x04A9 PID 0x1736, device class 00, full speed; interface 0
+      class ff/00/ff (vendor), interfaces 1 and 2 both class 07/01 protocol 02
+      (bidirectional); GET_DEVICE_ID on interface 1 returned 150 bytes:
+      "MFG:Canon;CMD:BJL,BJRaster3,BSCCe,PLI;SOJ:TXT01;MDL:MX320 series;CLS:PRINTER;
+      DES:Canon MX320 series;VER:1.050;STA:10;FSI:04;HRI:EU;MSI:DAT,E3;PDR:4;".
+      GET_PORT_STATUS on interface 1 = 0x18 (select, not-error, paper present).
+    limitation: >-
+      TWO printer-class interfaces (1 and 2), not one as FSD A1 assumes; which one the
+      firmware claims is a spec question for /define. Only interface 1 was queried.
   printer-port-status:
     what: The MX320's 1284 port-status bits change with paper out / error (FSD R3, OD-3)
     available: unproven
+    observed: >-
+      2026-11-04, idle printer (no job), commissioning probe polling GET_PORT_STATUS on
+      interface 1 every 1 s: 0x18 (paper_empty=0, select=1, not_error=1) from 17:28:53;
+      operator emptied the paper tray (confirmed ~17:35:10) — still 0x18 at every poll
+      through the paper-back prompt. The idle MX320 does not report an empty tray in
+      the port-status byte.
+    note: >-
+      Not yet a `no`: Canon units commonly detect paper-out only on a feed attempt.
+      Re-run with paper removed while a job prints (needs mx320-job-file). Hint for
+      /define (OD-3): the Device ID carries a Canon `STA:` field (STA:10 at idle) that
+      may carry status where the port-status byte does not.
   usb-printer-sink:
     what: A USB printer-class device that records every bulk-OUT byte, can pause (NAK) on command, and returns a set Device ID (incl. zero-length or STALL) and port status (FSD §25.0, OD-4)
     available: no
