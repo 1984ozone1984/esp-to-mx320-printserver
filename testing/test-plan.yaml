@@ -203,7 +203,15 @@ capabilities:
       FR-13.1 (c) cannot run at all until it is built.
   printer-detach:
     what: Detach and re-attach the printer's USB on demand while the DUT runs (operator prompt, or a switchable hub port)
-    available: unproven
+    available: yes
+    observed: >-
+      2026-11-04, commissioning probe a759800, two operator-prompted cycles: unplug ->
+      `probe: gone addr=2` 17:44:01, replug -> `attach addr=4 vid=04a9 pid=1736` 17:44:09
+      with Device ID MDL:MX320 series; unplug -> `gone addr=4` 17:44:23, replug ->
+      `attach addr=5` 17:44:28 with Device ID. Each act was seen by the ESP.
+    limitation: >-
+      Operator-only (no switchable hub port): detach timing is the operator's, so tests
+      bound latencies from the operator's DONE, not from the physical act.
   mx320-job-file:
     what: A rendered one-page MX320 print job (driver print-to-file), committed under tests/data/, that prints a known page
     available: unproven
@@ -243,7 +251,7 @@ capabilities:
     available: unproven
   dut-power-cycle:
     what: Power the DUT off and on as FSD §2.2 defines — on a bench prompt the operator unplugs the XIAO's USB-C from the Pi (Phase 1) or disconnects the hub's 5 V supply (Phase 2 on); in both the UART adapter is not a power path to the XIAO
-    available: unproven
+    available: yes
     observed: >-
       2026-11-03 (JRN-01.1 prep): with the USB-C unplugged the console did not answer
       `admin x`; on replug `rst:0x1 (POWERON)` and `boot: … reset=POWERON`. A one-prompt
@@ -252,8 +260,11 @@ capabilities:
       Phase 1 variant proven 2026-11-02: operator unplugged the XIAO's USB-C from
       the Pi with the UART adapter connected, re-plugged it after the second prompt;
       SLOT3 UART then showed `rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)` at
-      17:32:11 UTC — the chip lost power, so TX/RX do not back-power it. The hub
-      5 V variant (Phase 2 on) is still unproven (agenda #13).
+      17:32:11 UTC — the chip lost power, so TX/RX do not back-power it.
+      Hub 5 V variant (Phase 2 on) proven 2026-11-04 (product wiring, console on
+      AUTO-1): operator switched the hub supply off — last console line 17:44:38, none
+      in the following 23 s (heartbeat period 5 s); supply back on -> `rst:0x1
+      (POWERON)` 17:45:15 and the MX320 attached again 17:45:16.
     limitation: >-
       SLOT4's hotplug state did not change during the unplug (last_event_ts stayed
       16:39:49 UTC) and the SLOT3 capture during a concurrent /api/serial/monitor
