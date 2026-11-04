@@ -1,0 +1,43 @@
+name: Commissioning probe
+
+# Builds commissioning/usb-probe (debugging-agenda #3, #4, #5, #14) — a bring-up
+# aid, never a release. The cold-flash set is taken from flash_args.
+
+on:
+  push:
+    branches: [main]
+    paths: ['commissioning/usb-probe/**', '.github/workflows/probe.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v6.0.2
+    defaults:
+      run:
+        shell: bash
+        working-directory: commissioning/usb-probe
+    steps:
+      - name: Trust the workspace
+        working-directory: .
+        run: git config --global --add safe.directory '*'
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build probe
+        run: |
+          . $IDF_PATH/export.sh >/dev/null
+          idf.py -B build -DSDKCONFIG=$PWD/build/sdkconfig set-target esp32s3
+          idf.py -B build -DSDKCONFIG=$PWD/build/sdkconfig build
+      - name: Collect cold-flash set
+        run: |
+          mkdir -p out/coldflash
+          cp build/flash_args out/coldflash/
+          awk '$1 ~ /^0x/ {print $2}' build/flash_args | while read -r f; do
+            cp "build/$f" out/coldflash/ || { echo "FATAL: missing build/$f"; exit 1; }
+          done
+          cat build/flash_args
+      - uses: actions/upload-artifact@v4
+        with:
+          name: usb-probe-${{ github.sha }}
+          path: commissioning/usb-probe/out/
